@@ -1,0 +1,80 @@
+export type WritingMode = "grammar" | "structure" | "review";
+export type SavedWritingRequest = {
+  id: string;
+  mode: WritingMode;
+  source: string;
+  createdAt: number;
+};
+const lifetime = 24 * 60 * 60 * 1000;
+/** Keep request references in this tab only; the authorized API remains the source of the result. */
+export class WritingRequestStore {
+  private prefix: string;
+  private key: string;
+  constructor(
+    private storage: Storage,
+    ownerId: string,
+    postId: string,
+  ) {
+    this.prefix = `jot:writing-request:${ownerId}:`;
+    this.key = this.prefix + postId;
+  }
+  read(now = Date.now()): SavedWritingRequest | "expired" | null {
+    try {
+      const raw = this.storage.getItem(this.key);
+      if (!raw || raw.length > 65000) return null;
+      const record = JSON.parse(raw);
+      if (
+        typeof record.id !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(record.id) ||
+        !["grammar", "structure", "review"].includes(record.mode) ||
+        typeof record.source !== "string" ||
+        new TextEncoder().encode(record.source).length > 30000 ||
+        !Number.isFinite(record.createdAt)
+      )
+        return null;
+      if (now - record.createdAt > lifetime) {
+        this.clear();
+        return "expired";
+      }
+      return record;
+    } catch {
+      return null;
+    }
+  }
+  write(record: SavedWritingRequest): boolean {
+    try {
+      let kept = 0;
+      for (let index = this.storage.length - 1; index >= 0; index--) {
+        const key = this.storage.key(index);
+        if (!key?.startsWith(this.prefix)) continue;
+        try {
+          const previous = JSON.parse(this.storage.getItem(key) || "{}");
+          if (
+            !Number.isFinite(previous.createdAt) ||
+            record.createdAt - previous.createdAt > lifetime
+          ) {
+            this.storage.removeItem(key);
+            continue;
+          }
+        } catch {
+          this.storage.removeItem(key);
+          continue;
+        }
+        if (key !== this.key) kept++;
+      }
+      if (kept >= 16) return false;
+      const encoded = JSON.stringify(record);
+      if (encoded.length > 65000 || new TextEncoder().encode(record.source).length > 30000)
+        return false;
+      this.storage.setItem(this.key, encoded);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  clear() {
+    try {
+      this.storage.removeItem(this.key);
+    } catch {}
+  }
+}

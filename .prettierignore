@@ -1,0 +1,13 @@
+node_modules
+.next
+apps/web/next-env.d.ts
+apps/api/uploads
+.turbo
+bin
+bun.lock
+go.sum
+.data
+.env
+.env.*
+!.env.example
+docs/scaffold

@@ -1,0 +1,14 @@
+.git
+.neon
+**/node_modules
+**/.next
+apps/web/next-env.d.ts
+apps/api/uploads
+**/.turbo
+**/bin
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+**/.data
+**/coverage

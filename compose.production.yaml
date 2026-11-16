@@ -1,0 +1,27 @@
+# Docker Compose 2.24.4+ is required for !override.
+services:
+  postgres:
+    environment:
+      APP_ENV: production
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set a separate bootstrap database password}
+      APP_DB_PASSWORD: ${POSTGRES_PASSWORD:?Set an application database password}
+    ports: !override []
+  migrate:
+    environment:
+      APP_ENV: production
+      APP_ORIGIN: https://${SITE_ADDRESS:?Set SITE_ADDRESS to your public DNS hostname}
+  api:
+    environment:
+      APP_ENV: production
+      APP_ORIGIN: https://${SITE_ADDRESS:?Set SITE_ADDRESS to your public DNS hostname}
+  worker:
+    environment:
+      APP_ENV: production
+      APP_ORIGIN: https://${SITE_ADDRESS:?Set SITE_ADDRESS to your public DNS hostname}
+  ingress:
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS to your public DNS hostname}
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"

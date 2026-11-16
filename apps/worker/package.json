@@ -1,0 +1,14 @@
+{
+  "name": "@jot/worker",
+  "private": true,
+  "scripts": {
+    "dev": "go -C ../api run ./cmd/worker",
+    "build": "go -C ../api build -o ../worker/bin/worker ./cmd/worker",
+    "check": "go -C ../api vet ./...",
+    "test": "go -C ../api test ./...",
+    "start": "go -C ../api run ./cmd/worker"
+  },
+  "dependencies": {
+    "@jot/api": "workspace:*"
+  }
+}

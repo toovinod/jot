@@ -1,0 +1,152 @@
+[
+  {
+    "title": "A quiet place for your ideas",
+    "subtitle": "Start with what you already wrote.",
+    "slug": "a-quiet-place-for-your-ideas",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Writing often begins somewhere else: a note on your phone, a document for a friend, a thought you did not want to lose."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": { "level": 2 },
+          "content": [{ "type": "text", "text": "Bring the words with you" }]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Paste your writing into Jot, shape it at your own pace, and publish when it feels ready. The page can be simple. The idea can be yours."
+            }
+          ]
+        },
+        {
+          "type": "blockquote",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                { "type": "text", "text": "A draft is a place to think, not a promise to publish." }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "title": "Small systems, clear boundaries",
+    "subtitle": "A few notes about building things that last.",
+    "slug": "small-systems-clear-boundaries",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "A useful system makes its important decisions visible: who owns the data, when a change becomes public, and what happens when a process stops."
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    { "type": "text", "text": "Keep drafts separate from published snapshots." }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    { "type": "text", "text": "Persist background work before acknowledging it." }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    { "type": "text", "text": "Make retries safe, and make failures observable." }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": { "language": "typescript" },
+          "content": [
+            {
+              "type": "text",
+              "text": "const draft = await save(words);\nawait publish(draft.revision);"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "title": "Notes from an ordinary afternoon",
+    "subtitle": "Pay attention to the things you almost miss.",
+    "slug": "notes-from-an-ordinary-afternoon",
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "The light moved across the desk while the tea cooled. Outside, somebody was learning the same four notes on a piano."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "I had planned to write something important. Instead I wrote down what was here: a crooked stack of books, an open window, the relief of an unfinished sentence."
+            }
+          ]
+        },
+        { "type": "horizontalRule" },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Sometimes that is enough for a beginning.",
+              "marks": [{ "type": "italic" }]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@custom-variant dark (&:where(.dark, .dark *):not(:where(.light, .light *)), &:where(.light .dark, .light .dark *));
+@layer base {
+  :root,
+  .light {
+    --background: #faf9f6;
+    --foreground: #24231f;
+    --card: #ffffff;
+    --muted: #efeee8;
+    --muted-foreground: #77756b;
+    --border: #e5e3db;
+    --primary: #a7482d;
+    --primary-foreground: #fffaf5;
+    --ring: #b45a40;
+    --destructive: #b52b34;
+    color-scheme: light;
+  }
+  .dark {
+    --background: #191b19;
+    --foreground: #eae8df;
+    --card: #20231f;
+    --muted: #2a2d27;
+    --muted-foreground: #a4a79b;
+    --border: #35392f;
+    --primary: #e49b78;
+    --primary-foreground: #261a14;
+    --ring: #e49b78;
+    --destructive: #f08b8f;
+    color-scheme: dark;
+  }
+}
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-mono: "SFMono-Regular", Consolas, monospace;
+}

@@ -1,0 +1,48 @@
+{
+  "name": "jot",
+  "private": true,
+  "packageManager": "bun@1.4.4",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun --bun --env-file=.env run turbo run dev",
+    "build": "bun --bun --env-file=.env run turbo run build",
+    "check": "bun run check:source && bun --bun run turbo run check",
+    "test": "bun run test:tooling && bun --bun run turbo run test",
+    "db:migrate": "bun --env-file=.env run --filter @jot/api migrate",
+    "db:seed": "bun run seed",
+    "test:integration": "bun run scripts/integration/http-smoke.ts",
+    "verify": "bun run check && bun run test && bun run build",
+    "db:up": "docker compose up -d --wait postgres",
+    "db:down": "docker compose down",
+    "worker": "bun --env-file=.env run --filter @jot/worker start",
+    "prepare": "bun --bun husky",
+    "lint-staged": "bun --bun ./node_modules/.bin/lint-staged",
+    "format": "bun --bun prettier --write . && gofmt -w apps/api",
+    "format:check": "bun --bun prettier --check . && bun run scripts/checks/go-format.ts",
+    "seed": "bun run scripts/seed.ts",
+    "check:source": "bun run scripts/checks/source-policy.ts",
+    "test:tooling": "bun test scripts/checks",
+    "check:containers": "bun run scripts/checks/compose-config.ts"
+  },
+  "devDependencies": {
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0",
+    "prettier": "3.10.1",
+    "turbo": "2.11.11",
+    "typescript": "7.0.2"
+  },
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.4.4"
+  },
+  "overrides": {
+    "postcss-selector-parser": "6.1.6"
+  },
+  "dependencies": {
+    "@neon/config": "1.14.0",
+    "@neon/env": "2.1.3"
+  }
+}
