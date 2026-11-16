@@ -1,5 +1,5 @@
 "use client";
-import { Trash2 } from "lucide-react";
+import { Trash } from "@phosphor-icons/react";
 import { date } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { useEditorController } from "./editor-controller";
@@ -10,7 +10,7 @@ export function PublicationHistory() {
   return (
     <>
       <section>
-        <h2 className="font-serif text-2xl">Earlier editions.</h2>
+        <h2 className="font-display text-2xl font-bold tracking-[-0.04em]">earlier editions.</h2>
         <p className="mb-6 mt-3 text-xs leading-6 text-muted-foreground">
           Restore an edition into this draft. The live publication stays as it is until you publish
           again.
@@ -43,7 +43,7 @@ export function PublicationHistory() {
           disabled={disabled || uploads > 0}
           onClick={deletePost}
         >
-          <Trash2 />
+          <Trash weight="bold" />
           Delete story
         </Button>
       </section>

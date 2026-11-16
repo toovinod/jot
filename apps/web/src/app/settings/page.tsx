@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import type { User } from "@jot/contracts";
 import { api, send, upload } from "@/lib/api";
 import { useSession } from "@/components/providers";
-import { Page, Private, LibraryNav } from "@/components/shell";
+import { AppShell, Private } from "@/components/shell";
 import { Avatar } from "@/components/document";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea, ErrorMessage } from "@/components/ui/fields";
@@ -56,19 +56,21 @@ function SettingsContent() {
   }, [dirty, uploading]);
   if (!user) return null;
   return (
-    <Page>
-      <div className="flex flex-col gap-10 md:flex-row">
-        <LibraryNav tab="settings" />
-        <div className="max-w-xl flex-1">
-          <p className="mb-3 text-xs uppercase tracking-[.15em] text-primary">
-            Make yourself known
-          </p>
-          <h1 className="font-serif text-5xl tracking-tight">A little about you.</h1>
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">
-            Your public profile is the signature at the end of every story.
+    <AppShell active="settings">
+      <div className="px-5 py-10 md:px-10">
+        <div className="max-w-2xl">
+          <p className="mb-3 font-mono text-xs text-sky-deep">settings</p>
+          <h1 className="font-display text-4xl font-extrabold tracking-[-0.05em] md:text-5xl">
+            a little about{" "}
+            <em className="font-serif font-normal italic tracking-[-0.03em] [font-variation-settings:'SOFT'_100]">
+              you.
+            </em>
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Your public profile is the signature at the end of every page.
           </p>
           <form
-            className="mt-10 grid gap-6"
+            className="mt-8 grid gap-6 rounded-3xl border border-border bg-white p-6 shadow-[0_3px_0_var(--border)] md:p-8"
             onSubmit={async (e) => {
               e.preventDefault();
               if (busy || uploading) return;
@@ -96,7 +98,7 @@ function SettingsContent() {
             <fieldset disabled={busy || uploading} className="grid gap-6">
               <div className="flex items-center gap-5">
                 <Avatar user={{ ...user, avatar, name }} size="large" />
-                <label className="cursor-pointer rounded-lg border border-border px-4 py-2 text-sm focus-within:ring-2 focus-within:ring-ring">
+                <label className="cursor-pointer rounded-full border border-border bg-white px-4 py-2 text-sm font-medium transition-colors hover:bg-sky-soft focus-within:ring-2 focus-within:ring-ring">
                   {uploading ? "Uploading…" : "Change photo"}
                   <input
                     aria-label="Upload profile photo"
@@ -152,8 +154,10 @@ function SettingsContent() {
               </Button>
             </fieldset>
           </form>
-          <section className="mt-14 border-t border-border pt-7">
-            <h2 className="font-medium">Available in this workspace</h2>
+          <section className="mt-6 rounded-3xl border border-border bg-white p-6 shadow-[0_3px_0_var(--border)] md:p-8">
+            <h2 className="font-display text-xl font-bold tracking-[-0.03em]">
+              available in this workspace
+            </h2>
             <ErrorMessage message={configError} />
             <p className="mt-3 text-sm leading-7 text-muted-foreground">
               Writing assistance: {config.aiEnabled ? "available" : "not configured"}
@@ -187,6 +191,6 @@ function SettingsContent() {
           </section>
         </div>
       </div>
-    </Page>
+    </AppShell>
   );
 }

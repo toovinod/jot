@@ -1,7 +1,8 @@
 "use client";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ThemeProvider } from "next-themes";
-import { Toaster } from "sonner";
+import { MotionConfig } from "motion/react";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { getMe, getConfig, ApiError } from "@/lib/api";
 import type { User, Config } from "@jot/contracts";
 const Context = createContext<{
@@ -88,11 +89,11 @@ export function Providers({ children }: { children: ReactNode }) {
     };
   }, []);
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <MotionConfig reducedMotion="user">
       <Context.Provider value={{ user, loading, authError, config, configError, setUser, refresh }}>
-        {children}
-        <Toaster richColors position="bottom-right" />
+        <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+        <Toaster position="bottom-right" />
       </Context.Provider>
-    </ThemeProvider>
+    </MotionConfig>
   );
 }

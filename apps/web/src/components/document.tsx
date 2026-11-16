@@ -210,6 +210,9 @@ const accents = {
   violet: "[--primary:#79519d] dark:[--primary:#bf9cde]",
   rose: "[--primary:#b44f70] dark:[--primary:#e899b1]",
 };
+export function themeClass(theme: Snapshot["appearance"]["theme"]) {
+  return theme === "system" ? "theme-system" : theme;
+}
 export function Article({
   snapshot,
   author,
@@ -225,7 +228,7 @@ export function Article({
     <article
       className={cn(
         "bg-background px-5 py-16 text-foreground sm:px-8",
-        a.theme !== "system" && a.theme,
+        themeClass(a.theme),
         accents[a.accent],
       )}
     >

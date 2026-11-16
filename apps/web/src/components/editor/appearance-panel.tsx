@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
+import { ArrowDown, ArrowUp, DotsSixVertical } from "@phosphor-icons/react";
 import type { Appearance, LayoutSection } from "@jot/contracts";
 import { Button } from "../ui/button";
 import { Field, Select } from "../ui/fields";
@@ -159,7 +159,7 @@ function SortableSection({
         className="touch-none rounded p-1 text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Reorder ${section}`}
       >
-        <GripVertical size={15} />
+        <DotsSixVertical size={15} weight="bold" />
       </button>
       <span className="flex-1 text-xs capitalize">{section}</span>
       <Button
@@ -170,7 +170,7 @@ function SortableSection({
         onClick={() => move(section, -1)}
         aria-label={`Move ${section} up`}
       >
-        <ArrowUp />
+        <ArrowUp weight="bold" />
       </Button>
       <Button
         variant="ghost"
@@ -180,7 +180,7 @@ function SortableSection({
         onClick={() => move(section, 1)}
         aria-label={`Move ${section} down`}
       >
-        <ArrowDown />
+        <ArrowDown weight="bold" />
       </Button>
     </li>
   );

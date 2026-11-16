@@ -1,32 +1,23 @@
 import type { ComponentProps, ReactNode } from "react";
+import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
+import { Input as BaseInput } from "./input";
+import { Textarea as BaseTextarea } from "./textarea";
+
+const control =
+  "rounded-xl border-border bg-white shadow-[0_2px_0_var(--border)] focus-visible:border-sky focus-visible:ring-sky/30";
+
 export function Input({ className, ...props }: ComponentProps<"input">) {
-  return (
-    <input
-      className={cn(
-        "h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <BaseInput className={cn("h-11 px-3.5", control, className)} {...props} />;
 }
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
-  return (
-    <textarea
-      className={cn(
-        "min-h-24 w-full rounded-lg border border-border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-ring",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <BaseTextarea className={cn("min-h-24 p-3.5", control, className)} {...props} />;
 }
 export function Select({ className, ...props }: ComponentProps<"select">) {
   return (
     <select
       className={cn(
-        "h-10 rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring",
+        "h-10 cursor-pointer rounded-xl border border-border bg-white px-3 text-sm shadow-[0_2px_0_var(--border)] outline-none focus-visible:border-sky focus-visible:ring-3 focus-visible:ring-sky/30",
         className,
       )}
       {...props}
@@ -37,13 +28,15 @@ export function Field({
   label,
   children,
   hint,
+  htmlFor,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
+  htmlFor?: string;
 }) {
   return (
-    <label className="grid gap-2 text-sm font-medium">
+    <label htmlFor={htmlFor} className="grid gap-2 text-sm font-medium">
       {label}
       {children}
       {hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}
@@ -54,8 +47,9 @@ export function ErrorMessage({ message }: { message?: string | null }) {
   return message ? (
     <p
       role="alert"
-      className="rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive"
+      className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive"
     >
+      <WarningCircle weight="fill" className="mt-0.5 size-4 shrink-0" />
       {message}
     </p>
   ) : null;

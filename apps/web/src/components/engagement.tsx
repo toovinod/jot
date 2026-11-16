@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Heart, Bookmark, Trash2 } from "lucide-react";
+import { BookmarkSimple, Heart, Trash } from "@phosphor-icons/react";
 import type { Comment, Post } from "@jot/contracts";
 import { api, send } from "@/lib/api";
-import { date } from "@/lib/utils";
+import { cn, date } from "@/lib/utils";
 import { useSession } from "./providers";
 import { Avatar } from "./document";
 import { Button } from "./ui/button";
@@ -61,7 +61,7 @@ function EngagementContent({ post }: { post: Post }) {
   }
   return (
     <section className="space-y-8">
-      <div className="flex gap-3 border-y border-border py-5">
+      <div className="flex flex-wrap gap-3 border-y border-dashed border-border py-5">
         {user ? (
           <>
             <Button
@@ -70,7 +70,10 @@ function EngagementContent({ post }: { post: Post }) {
               onClick={() => toggle("like")}
               aria-pressed={data.liked}
             >
-              <Heart fill={data.liked ? "currentColor" : "none"} />
+              <Heart
+                weight={data.liked ? "fill" : "bold"}
+                className={cn("transition-transform", data.liked && "scale-110 text-rose")}
+              />
               {data.likes} {data.likes === 1 ? "like" : "likes"}
             </Button>
             <Button
@@ -79,14 +82,17 @@ function EngagementContent({ post }: { post: Post }) {
               onClick={() => toggle("bookmark")}
               aria-pressed={data.bookmarked}
             >
-              <Bookmark fill={data.bookmarked ? "currentColor" : "none"} />
+              <BookmarkSimple
+                weight={data.bookmarked ? "fill" : "bold"}
+                className={cn(data.bookmarked && "text-sky-deep")}
+              />
               {data.bookmarked ? "Saved" : "Save for later"}
             </Button>
           </>
         ) : (
           <Button variant="outline" asChild>
             <Link href="/login">
-              <Heart />
+              <Heart weight="bold" />
               {data.likes} likes · Log in to join in
             </Link>
           </Button>
@@ -94,7 +100,13 @@ function EngagementContent({ post }: { post: Post }) {
       </div>
       <ErrorMessage message={error} />
       <div>
-        <h2 className="font-serif text-3xl">Continue the conversation.</h2>
+        <h2 className="font-display text-3xl font-extrabold tracking-[-0.05em]">
+          keep the{" "}
+          <em className="font-serif font-normal italic tracking-[-0.03em] [font-variation-settings:'SOFT'_100]">
+            conversation
+          </em>{" "}
+          going.
+        </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           A thoughtful reply can be the start of something.
         </p>
@@ -134,7 +146,7 @@ function EngagementContent({ post }: { post: Post }) {
         </form>
       ) : (
         <p className="text-sm text-muted-foreground">
-          <Link href="/login" className="text-primary underline">
+          <Link href="/login" className="font-medium text-sky-deep underline">
             Log in
           </Link>{" "}
           to leave a comment.
@@ -171,7 +183,7 @@ function EngagementContent({ post }: { post: Post }) {
                     }
                   }}
                 >
-                  <Trash2 />
+                  <Trash weight="bold" />
                 </Button>
               )}
             </div>

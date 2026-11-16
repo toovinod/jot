@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { ArrowUpRight, Heart, MessageCircle } from "lucide-react";
+import { ArrowUpRight, ChatCircle, Heart } from "@phosphor-icons/react/dist/ssr";
 import { postPath, type PostSummary } from "@jot/contracts";
 import { AuthorLine } from "./document";
 import { safeUrl } from "@/lib/utils";
 export function PostCard({ post, index }: { post: PostSummary; index?: number }) {
   const cover = safeUrl(post.cover, true);
+  const path = postPath(post.author.username, post.slug);
   return (
-    <article className="group flex flex-col border-b border-border py-8">
+    <article className="group flex h-full flex-col rounded-3xl border border-border bg-white p-6 shadow-[0_4px_0_var(--border)] transition-transform duration-200 hover:-translate-y-1 hover:-rotate-[0.3deg] motion-reduce:transform-none">
       <div className="mb-5 flex items-center justify-between">
         <AuthorLine author={post.author} publishedAt={post.publishedAt} />
         {index !== undefined && (
@@ -15,12 +16,12 @@ export function PostCard({ post, index }: { post: PostSummary; index?: number })
           </span>
         )}
       </div>
-      <Link href={postPath(post.author.username, post.slug)} className="flex flex-1 gap-6">
-        <div className="flex-1">
-          <h2 className="font-serif text-3xl leading-tight tracking-tight transition-colors group-hover:text-primary">
+      <Link href={path} className="flex flex-1 gap-5">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-serif text-[26px] leading-tight tracking-[-0.01em] transition-colors group-hover:text-sky-deep">
             {post.title || "Untitled"}
           </h2>
-          <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">
+          <p className="mt-2.5 line-clamp-2 text-sm leading-6 text-muted-foreground">
             {post.subtitle || post.excerpt}
           </p>
         </div>
@@ -29,23 +30,27 @@ export function PostCard({ post, index }: { post: PostSummary; index?: number })
             src={cover}
             alt=""
             loading="lazy"
-            className="size-24 rounded-lg object-cover sm:size-28"
+            className="size-24 rounded-2xl object-cover sm:size-28"
             referrerPolicy="no-referrer"
           />
         )}
       </Link>
-      <div className="mt-6 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{post.readingMinutes} min read</span>
-        <span className="flex items-center gap-4">
+      <div className="mt-6 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span className="truncate font-mono">{path}</span>
+        <span className="flex shrink-0 items-center gap-3.5">
+          <span>{post.readingMinutes} min read</span>
           <span className="flex items-center gap-1">
-            <Heart size={13} />
+            <Heart weight="fill" className="size-3.5 text-rose" />
             {post.likes || 0}
           </span>
           <span className="flex items-center gap-1">
-            <MessageCircle size={13} />
+            <ChatCircle weight="duotone" className="size-3.5" />
             {post.comments || 0}
           </span>
-          <ArrowUpRight size={15} className="text-primary" />
+          <ArrowUpRight
+            weight="bold"
+            className="size-4 text-sky-deep transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+          />
         </span>
       </div>
     </article>

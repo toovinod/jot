@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Mail, ArrowRight } from "lucide-react";
+import { ArrowRight, EnvelopeSimple } from "@phosphor-icons/react";
 import { api, send } from "@/lib/api";
 import { useSession } from "./providers";
 import { Button } from "./ui/button";
@@ -12,19 +12,26 @@ export function Subscribe({ username, name }: { username: string; name: string }
     [done, setDone] = useState(false),
     [error, setError] = useState("");
   return (
-    <section className="rounded-xl border border-border bg-muted/40 p-6 sm:p-9">
-      <Mail className="mb-5 text-primary" size={23} strokeWidth={1.5} />
-      <h2 className="font-serif text-3xl">A letter, now and then.</h2>
+    <section className="relative overflow-hidden rounded-[28px] border border-border bg-white p-6 shadow-[0_4px_0_var(--border)] sm:p-9">
+      <span className="mb-5 grid size-12 place-items-center rounded-2xl bg-sky-soft text-sky-deep">
+        <EnvelopeSimple weight="duotone" size={26} />
+      </span>
+      <h2 className="font-display text-3xl font-extrabold tracking-[-0.05em]">
+        a letter,{" "}
+        <em className="font-serif font-normal italic tracking-[-0.03em] [font-variation-settings:'SOFT'_100]">
+          now and then.
+        </em>
+      </h2>
       <p className="mb-6 mt-3 text-sm leading-6 text-muted-foreground">
-        New stories from {name || username}, straight to your inbox. Only when they have something
-        to share.
+        New pages from {name || username}, straight to your inbox. Only when there is something to
+        share.
       </p>
       {!config.emailEnabled ? (
         <p className="text-xs text-muted-foreground">
           {configError || "Email subscriptions are not configured for this publication yet."}
         </p>
       ) : done ? (
-        <p role="status" className="text-sm text-primary">
+        <p role="status" className="text-sm font-medium text-[#22803a]">
           Check your inbox to confirm. If you're already subscribed, you're all set.
         </p>
       ) : (
@@ -60,7 +67,7 @@ export function Subscribe({ username, name }: { username: string; name: string }
             />
             <Button disabled={busy} type="submit">
               {busy ? "Sending…" : "Subscribe"}
-              <ArrowRight />
+              <ArrowRight weight="bold" />
             </Button>
           </div>
           <div className="mt-3">

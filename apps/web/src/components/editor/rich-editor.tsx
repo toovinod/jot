@@ -9,23 +9,23 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { Markdown } from "@tiptap/markdown";
 import {
-  Bold,
-  Italic,
-  Strikethrough,
-  Code2,
-  Quote,
-  List,
-  ListOrdered,
+  ArrowClockwise,
+  ArrowCounterClockwise,
+  Code,
+  Image as ImageIcon,
+  LinkSimple,
+  ListBullets,
+  ListChecks,
+  ListNumbers,
   Minus,
-  Table2,
-  CheckSquare,
-  ImagePlus,
-  Link2,
-  Undo2,
-  Redo2,
-  Heading2,
-  Upload,
-} from "lucide-react";
+  Quotes,
+  Table,
+  TextB,
+  TextHTwo,
+  TextItalic,
+  TextStrikethrough,
+  UploadSimple,
+} from "@phosphor-icons/react";
 import type { DocNode } from "@jot/contracts";
 import { isSupportedImage, uploadEditorImages } from "./image-import";
 import { cleanClipboardHTML, insertClipboardContent, looksLikeMarkdown } from "@/lib/paste";
@@ -145,55 +145,55 @@ export function RichEditor({
   const tools = [
     {
       label: "Bold",
-      icon: Bold,
+      icon: TextB,
       active: editor.isActive("bold"),
       action: () => editor.chain().focus().toggleBold().run(),
     },
     {
       label: "Italic",
-      icon: Italic,
+      icon: TextItalic,
       active: editor.isActive("italic"),
       action: () => editor.chain().focus().toggleItalic().run(),
     },
     {
       label: "Strike",
-      icon: Strikethrough,
+      icon: TextStrikethrough,
       active: editor.isActive("strike"),
       action: () => editor.chain().focus().toggleStrike().run(),
     },
     {
       label: "Heading",
-      icon: Heading2,
+      icon: TextHTwo,
       active: editor.isActive("heading"),
       action: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
     },
     {
       label: "Bulleted list",
-      icon: List,
+      icon: ListBullets,
       active: editor.isActive("bulletList"),
       action: () => editor.chain().focus().toggleBulletList().run(),
     },
     {
       label: "Numbered list",
-      icon: ListOrdered,
+      icon: ListNumbers,
       active: editor.isActive("orderedList"),
       action: () => editor.chain().focus().toggleOrderedList().run(),
     },
     {
       label: "Task list",
-      icon: CheckSquare,
+      icon: ListChecks,
       active: editor.isActive("taskList"),
       action: () => editor.chain().focus().toggleTaskList().run(),
     },
     {
       label: "Quote",
-      icon: Quote,
+      icon: Quotes,
       active: editor.isActive("blockquote"),
       action: () => editor.chain().focus().toggleBlockquote().run(),
     },
     {
       label: "Code block",
-      icon: Code2,
+      icon: Code,
       active: editor.isActive("codeBlock"),
       action: () => editor.chain().focus().toggleCodeBlock().run(),
     },
@@ -201,7 +201,7 @@ export function RichEditor({
   return (
     <div>
       <div
-        className="sticky top-[65px] z-10 -mx-2 mb-9 flex flex-wrap items-center gap-0.5 rounded-lg border border-border bg-background/95 p-1.5 backdrop-blur"
+        className="sticky top-[76px] z-10 -mx-2 mb-9 flex flex-wrap items-center gap-0.5 rounded-full border border-border bg-white/95 p-1.5 font-sans shadow-[0_3px_0_var(--border)] backdrop-blur"
         role="toolbar"
         aria-label="Text formatting"
       >
@@ -210,20 +210,25 @@ export function RichEditor({
             key={tool.label}
             type="button"
             size="icon"
-            variant={tool.active ? "outline" : "ghost"}
+            variant="ghost"
+            className={cn(
+              "rounded-full",
+              tool.active && "bg-sky-soft text-sky-deep hover:bg-sky-soft",
+            )}
             disabled={disabled}
             title={tool.label}
             aria-label={tool.label}
             aria-pressed={tool.active}
             onClick={tool.action}
           >
-            <tool.icon size={16} />
+            <tool.icon size={17} weight={tool.active ? "fill" : "bold"} />
           </Button>
         ))}
         <Button
           type="button"
           variant="ghost"
           size="icon"
+          className="rounded-full"
           disabled={disabled}
           aria-label="Add or remove link"
           title="Link"
@@ -245,12 +250,13 @@ export function RichEditor({
             editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
           }}
         >
-          <Link2 />
+          <LinkSimple weight="bold" />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
+          className="rounded-full"
           disabled={disabled}
           aria-label="Insert table"
           title="Insert table"
@@ -258,38 +264,40 @@ export function RichEditor({
             editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
           }
         >
-          <Table2 />
+          <Table weight="bold" />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
+          className="rounded-full"
           disabled={disabled}
           aria-label="Insert divider"
           title="Divider"
           onClick={() => editor.chain().focus().setHorizontalRule().run()}
         >
-          <Minus />
+          <Minus weight="bold" />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
+          className="rounded-full"
           disabled={disabled || uploads > 0}
           aria-label="Upload image"
           title="Upload image"
           onClick={() => file.current?.click()}
         >
-          <ImagePlus />
+          <ImageIcon weight="bold" />
         </Button>
         <label
           className={cn(
-            "inline-flex size-9 cursor-pointer items-center justify-center rounded-lg hover:bg-muted focus-within:ring-2 focus-within:ring-ring",
+            "inline-flex size-10 cursor-pointer items-center justify-center rounded-full hover:bg-sky-soft focus-within:ring-2 focus-within:ring-ring",
             disabled && "pointer-events-none opacity-40",
           )}
           title="Import Markdown"
         >
-          <Upload size={16} />
+          <UploadSimple size={16} weight="bold" />
           <span className="sr-only">Import Markdown file</span>
           <input
             type="file"
@@ -328,21 +336,23 @@ export function RichEditor({
           type="button"
           size="icon"
           variant="ghost"
+          className="rounded-full"
           aria-label="Undo"
           disabled={disabled || !editor.can().undo()}
           onClick={() => editor.chain().focus().undo().run()}
         >
-          <Undo2 />
+          <ArrowCounterClockwise weight="bold" />
         </Button>
         <Button
           type="button"
           size="icon"
           variant="ghost"
+          className="rounded-full"
           aria-label="Redo"
           disabled={disabled || !editor.can().redo()}
           onClick={() => editor.chain().focus().redo().run()}
         >
-          <Redo2 />
+          <ArrowClockwise weight="bold" />
         </Button>
       </div>
       {editor.isActive("table") && (
@@ -408,7 +418,7 @@ export function RichEditor({
       {warning && (
         <div
           role="status"
-          className="mb-5 rounded-lg bg-muted p-3 text-xs leading-6 text-muted-foreground"
+          className="mb-5 rounded-2xl bg-sky-soft p-3 font-sans text-xs leading-6 text-sky-deep"
         >
           {warning}
           <button className="ml-3 underline" onClick={() => setWarning("")}>
@@ -423,7 +433,7 @@ export function RichEditor({
         </p>
       )}
       <EditorContent editor={editor} />
-      <p className="mt-10 border-t border-border pt-5 text-[11px] leading-6 text-muted-foreground">
+      <p className="mt-10 border-t border-dashed border-border pt-5 font-sans text-[11px] leading-6 text-muted-foreground">
         Paste from your notes or documents. Supported formatting includes headings, lists, tables,
         tasks, links and code. Unsupported styles are simplified. Images tied to another app may
         need uploading. Videos are not supported.

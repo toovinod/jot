@@ -9,7 +9,7 @@ export function RecoveryNotice() {
       {recovery && (
         <section
           role="status"
-          className="mx-auto my-5 max-w-4xl space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-5"
+          className="mx-auto my-5 max-w-4xl space-y-4 rounded-2xl border border-[#f5d77a] bg-[#fff8e0] p-5"
         >
           <h2 className="font-medium">This tab has an unsaved local draft.</h2>
           <p className="text-sm leading-6 text-muted-foreground">

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { DownloadSimple } from "@phosphor-icons/react";
 import { Button } from "../ui/button";
 import { ErrorMessage } from "../ui/fields";
 import { useEditorController } from "./editor-controller";
@@ -19,7 +19,7 @@ export function SaveNotice() {
                   : "Your writing is kept on this page. Check your connection and retry before leaving."}
               </p>
               <Button size="sm" variant="outline" onClick={downloadDraft}>
-                <Download />
+                <DownloadSimple weight="bold" />
                 Export draft
               </Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={retrySave}>

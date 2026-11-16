@@ -1,5 +1,5 @@
 "use client";
-import { Upload } from "lucide-react";
+import { ImageSquare } from "@phosphor-icons/react";
 import { cn, slugify } from "@/lib/utils";
 import { Article } from "../document";
 import { RichEditor } from "./rich-editor";
@@ -28,7 +28,7 @@ export function DraftCanvas() {
         ) : (
           <div
             className={cn(
-              "mx-auto px-6 py-12 sm:px-10 sm:py-16",
+              "mx-auto my-4 rounded-[28px] border border-border bg-white px-6 py-12 shadow-[0_4px_0_var(--border)] sm:my-8 sm:px-12 sm:py-16",
               snapshot.appearance.width === "narrow"
                 ? "max-w-2xl"
                 : snapshot.appearance.width === "wide"
@@ -42,8 +42,8 @@ export function DraftCanvas() {
             )}
           >
             <div className="mb-10">
-              <p className="mb-7 font-sans text-[10px] uppercase tracking-[.18em] text-muted-foreground">
-                {post.published ? "A new draft of your published story" : "A little room to begin"}
+              <p className="mb-7 font-mono text-xs text-sky-deep">
+                {post.published ? "a new draft of your live page" : "a little room to begin"}
               </p>
               <label className="sr-only" htmlFor="story-title">
                 Story title
@@ -83,11 +83,11 @@ export function DraftCanvas() {
               <div className="mt-4 flex flex-wrap items-center gap-4 font-sans text-xs text-muted-foreground">
                 <label
                   className={cn(
-                    "inline-flex cursor-pointer items-center gap-2 rounded hover:text-primary focus-within:ring-2 focus-within:ring-ring",
+                    "inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-3 py-1.5 font-medium transition-colors hover:bg-sky-soft hover:text-sky-deep focus-within:ring-2 focus-within:ring-ring",
                     (disabled || uploads > 0) && "pointer-events-none opacity-40",
                   )}
                 >
-                  <Upload size={14} />
+                  <ImageSquare size={14} weight="bold" />
                   {cover ? "Replace cover" : "Add a cover image"}
                   <input
                     type="file"
@@ -113,7 +113,7 @@ export function DraftCanvas() {
                 <img
                   src={cover}
                   alt="Story cover"
-                  className="mt-7 max-h-96 w-full rounded-xl object-cover"
+                  className="mt-7 max-h-96 w-full rounded-2xl object-cover"
                   referrerPolicy="no-referrer"
                 />
               )}

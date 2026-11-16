@@ -9,17 +9,20 @@ export function EditorSidebar() {
   return (
     <aside
       hidden={!panel}
-      className="w-full shrink-0 border-b border-border bg-card/30 p-6 lg:sticky lg:top-16 lg:h-[calc(100vh-65px)] lg:w-80 lg:overflow-y-auto lg:border-b-0 lg:border-l"
+      className="w-full shrink-0 border-b border-border bg-white p-6 lg:sticky lg:top-[68px] lg:h-[calc(100vh-68px)] lg:w-80 lg:overflow-y-auto lg:border-b-0 lg:border-l"
     >
       <div className="mb-7 flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-[.16em] text-muted-foreground">
+        <p className="font-mono text-xs text-sky-deep">
           {panel === "appearance"
-            ? "The finishing touches"
+            ? "the finishing touches"
             : panel === "ai"
-              ? "Writing assistance"
-              : "Publication history"}
+              ? "writing assistance"
+              : "publication history"}
         </p>
-        <button onClick={() => setPanel(null)} className="text-xs text-muted-foreground underline">
+        <button
+          onClick={() => setPanel(null)}
+          className="rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-sky-soft hover:text-sky-deep"
+        >
           Close
         </button>
       </div>

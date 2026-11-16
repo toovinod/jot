@@ -2,15 +2,16 @@
 import {
   ArrowLeft,
   Check,
-  Cloud,
-  Paintbrush,
-  Sparkles,
-  History,
-  PenLine,
+  ClockCounterClockwise,
+  CloudArrowUp,
   Eye,
-  Send,
-} from "lucide-react";
+  PaintBrush,
+  PaperPlaneTilt,
+  PencilSimpleLine,
+  Sparkle,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { JotMark } from "../brand/logo";
 import { Button } from "../ui/button";
 import { useEditorController } from "./editor-controller";
 export function EditorToolbar() {
@@ -30,7 +31,7 @@ export function EditorToolbar() {
   } = useEditorController();
   return (
     <>
-      <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur md:px-7">
+      <header className="sticky top-0 z-30 flex min-h-[68px] flex-wrap items-center justify-between gap-3 border-b border-border bg-white/90 px-4 py-3 backdrop-blur-md md:px-7">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -39,7 +40,7 @@ export function EditorToolbar() {
             disabled={busy || uploads > 0}
             onClick={() => navigateTo("/dashboard")}
           >
-            <ArrowLeft />
+            <ArrowLeft weight="bold" />
           </Button>
           <a
             href="/"
@@ -48,31 +49,40 @@ export function EditorToolbar() {
               e.preventDefault();
               navigateTo("/");
             }}
-            className="text-lg font-black tracking-tight"
+            className="inline-flex items-center gap-1.5 font-display text-xl font-extrabold tracking-[-0.05em]"
           >
-            jot<span className="text-primary">.</span>
+            <JotMark className="size-6 text-ink" />
+            jot
           </a>
           <span className="hidden text-muted-foreground sm:inline">/</span>
           <span
             role="status"
             aria-live="polite"
             className={cn(
-              "sr-only items-center gap-1.5 text-[11px] sm:not-sr-only sm:inline-flex",
-              saveState.error ? "text-destructive" : "text-muted-foreground",
+              "sr-only items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium sm:not-sr-only sm:inline-flex",
+              saveState.error || saveState.dirty
+                ? "bg-[#fff1c7] text-[#8a6200]"
+                : saveState.saving
+                  ? "bg-sky-soft text-sky-deep"
+                  : "bg-[#dff5e3] text-[#22803a]",
             )}
           >
             {saveState.error ? (
               "Unsaved changes"
             ) : saveState.saving ? (
               <>
-                <Cloud size={13} />
+                <CloudArrowUp
+                  size={13}
+                  weight="bold"
+                  className="animate-pulse motion-reduce:animate-none"
+                />
                 Saving…
               </>
             ) : saveState.dirty ? (
               "Unsaved changes"
             ) : (
               <>
-                <Check size={13} />
+                <Check size={13} weight="bold" />
                 All changes saved
               </>
             )}
@@ -81,29 +91,32 @@ export function EditorToolbar() {
         <div className="flex items-center gap-1 sm:gap-2">
           <Button
             size="sm"
-            variant={panel === "appearance" ? "outline" : "ghost"}
+            variant="ghost"
+            className={cn(panel === "appearance" && "bg-sky-soft text-sky-deep")}
             disabled={busy}
             aria-expanded={panel === "appearance"}
             aria-label="Customize"
             onClick={() => setPanel(panel === "appearance" ? null : "appearance")}
           >
-            <Paintbrush />
+            <PaintBrush weight={panel === "appearance" ? "fill" : "bold"} />
             <span className="hidden sm:inline">Customize</span>
           </Button>
           <Button
             size="sm"
-            variant={panel === "ai" ? "outline" : "ghost"}
+            variant="ghost"
+            className={cn(panel === "ai" && "bg-sky-soft text-sky-deep")}
             disabled={busy}
             aria-expanded={panel === "ai"}
             aria-label="Assist"
             onClick={() => setPanel(panel === "ai" ? null : "ai")}
           >
-            <Sparkles />
+            <Sparkle weight={panel === "ai" ? "fill" : "bold"} />
             <span className="hidden sm:inline">Assist</span>
           </Button>
           <Button
             size="sm"
-            variant={panel === "history" ? "outline" : "ghost"}
+            variant="ghost"
+            className={cn(panel === "history" && "bg-sky-soft text-sky-deep")}
             disabled={busy}
             aria-label="Publication history"
             aria-expanded={panel === "history"}
@@ -112,7 +125,7 @@ export function EditorToolbar() {
               void loadPublicationHistory();
             }}
           >
-            <History />
+            <ClockCounterClockwise weight={panel === "history" ? "fill" : "bold"} />
           </Button>
           <Button
             size="sm"
@@ -121,7 +134,7 @@ export function EditorToolbar() {
             aria-label={preview ? "Edit" : "Preview"}
             onClick={() => setPreview((value) => !value)}
           >
-            {preview ? <PenLine /> : <Eye />}
+            {preview ? <PencilSimpleLine weight="bold" /> : <Eye weight="bold" />}
             <span className="hidden sm:inline">{preview ? "Edit" : "Preview"}</span>
           </Button>
           <Button
@@ -130,7 +143,7 @@ export function EditorToolbar() {
             aria-expanded={publishOpen}
             onClick={() => setPublishOpen((value) => !value)}
           >
-            <Send />
+            <PaperPlaneTilt weight="fill" />
             {post.published ? "Update" : "Publish"}
           </Button>
         </div>

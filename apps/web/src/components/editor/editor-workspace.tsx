@@ -10,7 +10,7 @@ import { EditorSidebar } from "./editor-sidebar";
 export function EditorWorkspace({ initial }: { initial: Post }) {
   return (
     <EditorProvider initial={initial}>
-      <div className="min-h-screen">
+      <div className="min-h-screen bg-background">
         <EditorToolbar />
         <RecoveryNotice />
         <SaveNotice />
@@ -27,9 +27,12 @@ export function EditorWorkspace({ initial }: { initial: Post }) {
 function DraftFooter() {
   const { downloadDraft } = useEditorController();
   return (
-    <footer className="flex justify-between gap-3 border-t border-border px-6 py-5 text-[11px] text-muted-foreground">
+    <footer className="flex justify-between gap-3 border-t border-border bg-white px-6 py-5 text-xs text-muted-foreground">
       <span>Your draft is private. Publishing is always your choice.</span>
-      <button onClick={downloadDraft} className="underline">
+      <button
+        onClick={downloadDraft}
+        className="cursor-pointer font-medium text-sky-deep hover:underline"
+      >
         Export draft
       </button>
     </footer>

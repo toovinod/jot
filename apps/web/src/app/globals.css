@@ -1,47 +1,145 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @plugin "@tailwindcss/typography";
-@custom-variant dark (&:where(.dark, .dark *):not(:where(.light, .light *)), &:where(.light .dark, .light .dark *));
+
+/* The app is light only. Dark styles exist solely for published pages whose author chose a
+   dark theme (.dark) or the reader's system theme (.theme-system). */
+@custom-variant dark {
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(.theme-system, .theme-system *) {
+      @slot;
+    }
+  }
+}
+
 @layer base {
   :root,
   .light {
-    --background: #faf9f6;
-    --foreground: #24231f;
+    --background: #f4f9ff;
+    --foreground: #16140f;
     --card: #ffffff;
-    --muted: #efeee8;
-    --muted-foreground: #77756b;
-    --border: #e5e3db;
-    --primary: #a7482d;
-    --primary-foreground: #fffaf5;
-    --ring: #b45a40;
-    --destructive: #b52b34;
+    --card-foreground: #16140f;
+    --popover: #ffffff;
+    --popover-foreground: #16140f;
+    --primary: #16140f;
+    --primary-foreground: #ffffff;
+    --secondary: #e3f2ff;
+    --secondary-foreground: #16140f;
+    --muted: #eaf2fb;
+    --muted-foreground: #5f6b7a;
+    --accent: #e3f2ff;
+    --accent-foreground: #16140f;
+    --destructive: #d92d3a;
+    --border: #dbe8f5;
+    --input: #dbe8f5;
+    --ring: #3fa9ff;
+    --radius: 0.875rem;
+    --sky-deep: #1a6fd0;
+    --sky: #3fa9ff;
+    --sky-mid: #9fdcff;
+    --sky-light: #d8f3ff;
+    --sky-soft: #e3f2ff;
+    --grass-1: #86dd78;
+    --grass-2: #45bd5f;
+    --grass-3: #23944c;
+    --sun: #ffd34d;
+    --rose: #f43f75;
+    --terra: #e0602f;
     color-scheme: light;
   }
   .dark {
     --background: #191b19;
     --foreground: #eae8df;
     --card: #20231f;
+    --card-foreground: #eae8df;
     --muted: #2a2d27;
     --muted-foreground: #a4a79b;
     --border: #35392f;
+    --input: #35392f;
     --primary: #e49b78;
     --primary-foreground: #261a14;
     --ring: #e49b78;
     --destructive: #f08b8f;
     color-scheme: dark;
   }
+  @media (prefers-color-scheme: dark) {
+    .theme-system {
+      --background: #191b19;
+      --foreground: #eae8df;
+      --card: #20231f;
+      --card-foreground: #eae8df;
+      --muted: #2a2d27;
+      --muted-foreground: #a4a79b;
+      --border: #35392f;
+      --input: #35392f;
+      --primary: #e49b78;
+      --primary-foreground: #261a14;
+      --ring: #e49b78;
+      --destructive: #f08b8f;
+      color-scheme: dark;
+    }
+  }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-ring: var(--ring);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
-  --font-sans: Arial, Helvetica, sans-serif;
-  --font-serif: Georgia, "Times New Roman", serif;
-  --font-mono: "SFMono-Regular", Consolas, monospace;
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sky-deep: var(--sky-deep);
+  --color-sky: var(--sky);
+  --color-sky-mid: var(--sky-mid);
+  --color-sky-light: var(--sky-light);
+  --color-sky-soft: var(--sky-soft);
+  --color-grass-1: var(--grass-1);
+  --color-grass-2: var(--grass-2);
+  --color-grass-3: var(--grass-3);
+  --color-sun: var(--sun);
+  --color-rose: var(--rose);
+  --color-terra: var(--terra);
+  --color-ink: #16140f;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@keyframes trail-dash {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+
+/* Body text set on the sky gradient: lifts white text off the lighter blues. */
+.on-sky {
+  text-shadow:
+    0 1px 2px rgb(0 40 100 / 0.45),
+    0 0 14px rgb(0 40 100 / 0.3);
 }

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Copy, Sparkles } from "lucide-react";
+import { Copy, Sparkle } from "@phosphor-icons/react";
 import { WritingRequestStore, type WritingMode } from "@/lib/writing-request";
 import { api, ApiError, send } from "@/lib/api";
 import { useSession } from "../providers";
@@ -75,7 +75,7 @@ export function AIPanel({ postId, text }: { postId: string; text: string }) {
   return (
     <section className="space-y-5">
       <div>
-        <Sparkles className="mb-4 text-primary" size={22} />
+        <Sparkle weight="duotone" className="mb-4 text-sky-deep" size={26} />
         <h2 className="font-serif text-2xl">A second pair of eyes.</h2>
         <p className="mt-3 text-xs leading-6 text-muted-foreground">
           Suggestions to consider, always your words to keep. Review flags possible gaps; it does
@@ -208,7 +208,7 @@ export function AIPanel({ postId, text }: { postId: string; text: string }) {
                   }
                 }}
               >
-                <Copy />
+                <Copy weight="bold" />
                 {copied ? "Copied" : "Copy suggestion"}
               </Button>
               <p className="text-[11px] leading-5 text-muted-foreground">

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "@phosphor-icons/react";
 import { postPath, type Snapshot } from "@jot/contracts";
 import { slugify } from "@/lib/utils";
 import { Button } from "../ui/button";
@@ -28,11 +28,11 @@ export function PublicationPanel() {
       {publishOpen && (
         <section
           aria-label="Publication settings"
-          className="border-b border-border bg-muted/40 px-5 py-7"
+          className="border-b border-border bg-sky-soft/60 px-5 py-7"
         >
           <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-[1fr_1fr_auto]">
             <div>
-              <h2 className="font-serif text-2xl">
+              <h2 className="font-display text-2xl font-bold tracking-[-0.04em]">
                 {post.published ? "Ready for a fresh edition?" : "Ready to share it?"}
               </h2>
               <p className="mt-2 text-xs leading-6 text-muted-foreground">
@@ -47,7 +47,7 @@ export function PublicationPanel() {
                   rel="noopener noreferrer"
                   className="mt-3 inline-flex items-center gap-1 text-xs text-primary"
                 >
-                  Open live story <ArrowUpRight size={13} />
+                  Open live story <ArrowUpRight size={13} weight="bold" />
                 </a>
               )}
             </div>
@@ -108,7 +108,7 @@ export function PublicationPanel() {
                 }}
               >
                 {busy ? "Publishing…" : post.published ? "Publish update" : "Publish story"}
-                <ArrowUpRight />
+                <ArrowUpRight weight="bold" />
               </Button>
               {post.published && (
                 <Button
