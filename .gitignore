@@ -12,3 +12,6 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 .neon
+
+# Local design notes
+docs/superpowers/
