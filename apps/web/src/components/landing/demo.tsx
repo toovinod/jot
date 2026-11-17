@@ -729,7 +729,12 @@ export function Demo() {
                 </div>
                 <div
                   ref={canvas}
-                  className="h-[420px] overflow-y-auto bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-[size:18px_18px] p-4 md:h-[520px] md:p-6"
+                  // A free canvas like the editor: the words sit on the dot grid, no page card.
+                  // The theme colors the whole canvas, so dark reads as dark.
+                  className={cn(
+                    "h-[420px] overflow-y-auto bg-background bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-[size:18px_18px] px-4 py-6 transition-colors md:h-[520px] md:px-8 md:py-10",
+                    themes[theme],
+                  )}
                 >
                   {mode === "page" ? (
                     <motion.article
@@ -739,18 +744,17 @@ export function Demo() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ type: "spring", stiffness: 220, damping: 26 }}
                       className={cn(
-                        "mx-auto space-y-3 rounded-2xl bg-white p-6 text-[15px] text-foreground shadow-[0_0_0_1px_var(--border),0_12px_30px_-18px_rgba(0,40,100,.35)] transition-colors dark:bg-card",
+                        "mx-auto space-y-3 text-[15px] text-foreground",
                         fonts[font],
                         widths[width],
-                        themes[theme],
                       )}
                     >
                       <Preview blocks={blocks} accent={accents[accent]} />
                     </motion.article>
                   ) : (
                     // What "export markdown" downloads: the title as "# title", then the body.
-                    <figure className="flex h-full flex-col overflow-hidden rounded-2xl bg-white shadow-[0_0_0_1px_var(--border)]">
-                      <figcaption className="border-b border-border px-5 py-2 font-mono text-xs text-muted-foreground">
+                    <figure className={cn("mx-auto flex h-full flex-col", widths[width])}>
+                      <figcaption className="pb-2 font-mono text-xs text-muted-foreground">
                         {file}
                       </figcaption>
                       <label className="flex flex-1">
@@ -760,7 +764,7 @@ export function Demo() {
                           maxLength={DEMO_LIMIT}
                           onChange={(event) => write(event.target.value)}
                           placeholder={"# a title\n\nthen anything at all."}
-                          className="w-full resize-none bg-transparent p-5 font-mono text-[13px] leading-relaxed outline-none focus:shadow-[inset_0_0_0_2px_var(--sky)]"
+                          className="w-full resize-none rounded-lg bg-transparent py-2 font-mono text-[13px] leading-relaxed text-foreground outline-none focus-visible:shadow-[0_0_0_2px_var(--sky)]"
                         />
                       </label>
                     </figure>
