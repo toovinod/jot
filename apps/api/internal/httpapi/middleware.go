@@ -32,7 +32,7 @@ func (s *Server) security(next http.Handler) http.Handler {
 				return
 			}
 			ip := s.clientIP(r)
-			if !s.limiter.allow("ip:"+ip, time.Now(), 120, time.Minute) {
+			if !s.limiter.allow("ip:"+rateAddress(ip), time.Now(), 120, time.Minute) {
 				writeError(w, 429, "Too many requests; try again shortly", "rate_limit")
 				return
 			}
@@ -160,8 +160,20 @@ type rateLimiter struct {
 
 const rateLimiterKeysPerPurpose = 10000
 
-// evictingRatePurposes guard only cheap, idempotent work, where forgetting a counter is harmless.
-var evictingRatePurposes = map[string]bool{"view": true}
+// evictingRatePurposes are the purposes where forgetting a counter is harmless. "view" guards cheap, idempotent
+// work. "ip" is the shared write limit for every client: refusing new addresses when it is full would lock out
+// everyone new, and an attacker churning addresses already gets a fresh counter per address, so evicting costs
+// nothing.
+var evictingRatePurposes = map[string]bool{"view": true, "ip": true}
+
+// rateAddress collapses an IPv6 client to its /64, which one household or device usually holds, so a single
+// client cannot make a new rate counter per address.
+func rateAddress(ip string) string {
+	if addr, e := netip.ParseAddr(ip); e == nil && addr.Is6() && !addr.Is4In6() {
+		return netip.PrefixFrom(addr, 64).Masked().Addr().String()
+	}
+	return ip
+}
 
 func (l *rateLimiter) allow(key string, now time.Time, limit int, window time.Duration) bool {
 	purpose, _, _ := strings.Cut(key, ":")

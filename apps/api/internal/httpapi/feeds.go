@@ -21,7 +21,7 @@ type rssItem struct {
 	PubDate     string   `xml:"pubDate"`
 	Author      string   `xml:"dc:creator"`
 	Description string   `xml:"description"`
-	Content     string   `xml:"content:encoded"`
+	Content     string   `xml:"content:encoded,omitempty"`
 	Categories  []string `xml:"category"`
 }
 type rssFeed struct {
@@ -71,6 +71,7 @@ func (s *Server) writeFeed(w http.ResponseWriter, r *http.Request, title, link, 
 	out.Version, out.ContentNS, out.DCNS = "2.0", "http://purl.org/rss/1.0/modules/content/", "http://purl.org/dc/elements/1.1/"
 	out.Channel.Title, out.Channel.Link, out.Channel.Description = title, link, html.EscapeString(description)
 	out.Channel.Items = []rssItem{}
+	contentBytes := 0
 	for rows.Next() {
 		var raw []byte
 		var at time.Time
@@ -89,7 +90,7 @@ func (s *Server) writeFeed(w http.ResponseWriter, r *http.Request, title, link, 
 		if description == "" {
 			description = domain.SummarizeSnapshot(sn).Excerpt
 		}
-		out.Channel.Items = append(out.Channel.Items, rssItem{Title: sn.Title, Link: link, GUID: link, PubDate: at.UTC().Format(time.RFC1123Z), Author: name, Description: html.EscapeString(description), Content: domain.RenderHTML(sn.Content, s.Config.Origin), Categories: sn.Tags})
+		out.Channel.Items = append(out.Channel.Items, rssItem{Title: sn.Title, Link: link, GUID: link, PubDate: at.UTC().Format(time.RFC1123Z), Author: name, Description: html.EscapeString(description), Content: feedContent(domain.RenderHTML(sn.Content, s.Config.Origin), &contentBytes), Categories: sn.Tags})
 	}
 	if e = rows.Err(); e != nil {
 		writeInternalError(w, e)
@@ -139,7 +140,21 @@ type cachedResponse struct {
 	expires time.Time
 }
 
-// maxCachedResponseBytes bounds the bodies the cache holds; one feed can carry 50 full posts.
+// maxFeedContentBytes bounds the full post HTML in one feed, so a feed always fits the response cache instead of
+// being rebuilt on every request. Posts past the budget keep their title, link and description; readers open
+// them on the web.
+const maxFeedContentBytes = 2 << 20
+
+// feedContent returns the post HTML while the feed's budget allows it, and counts it against used.
+func feedContent(rendered string, used *int) string {
+	if *used+len(rendered) > maxFeedContentBytes {
+		return ""
+	}
+	*used += len(rendered)
+	return rendered
+}
+
+// maxCachedResponseBytes bounds the bodies the cache holds; feeds stay under maxFeedContentBytes of post HTML.
 const maxCachedResponseBytes = 8 << 20
 
 type responseCache struct {
