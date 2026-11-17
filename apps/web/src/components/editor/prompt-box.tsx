@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from "react";
 import type { Editor } from "@tiptap/react";
+import type { Transaction } from "@tiptap/pm/state";
 import {
   ArrowUp,
   CaretDown,
@@ -34,10 +35,12 @@ import {
   chatTarget,
   clipBytes,
   countWords,
+  followTarget,
   hasMention,
   mention,
   mentionAt,
   readResult,
+  rebaseTarget,
   replaceWithMarkdown,
   targetHolds,
   withoutMention,
@@ -58,12 +61,30 @@ type Turn = {
   error?: string;
   result?: AIChatResult;
   proposal?: "open" | "stale" | "applied" | "discarded";
+  /** What changed since the question, which applying leaves as the writer has it. */
+  stale?: Stale[];
   notice?: string;
 };
+type Stale = "title" | "subtitle" | "body";
 type Context = { text: string; name?: string };
-// Each page keeps its conversation and context while the tab is open, never on the server.
+/** What an applied proposal replaced, and what it put there, for its undo. */
+type Applied = {
+  before: Editor["state"]["doc"] | null;
+  after: Editor["state"]["doc"] | null;
+  header: Partial<Snapshot>;
+  applied: Partial<Snapshot>;
+};
+// Each page keeps its conversation and context while the tab is open, never on the server. A
+// request that settles after its page closed still lands in its conversation.
 const threads = new Map<string, Turn[]>(),
-  contexts = new Map<string, Context>();
+  contexts = new Map<string, Context>(),
+  // The open page's thread, which shows each change to its conversation.
+  views = new Map<string, (turns: Turn[]) => void>();
+function changeThread(postId: string, change: (turns: Turn[]) => Turn[]) {
+  const next = change(threads.get(postId) ?? []);
+  threads.set(postId, next);
+  views.get(postId)?.(next);
+}
 let nextId = 1;
 const limits = { title: 200, subtitle: 500 } as const;
 const proposes = (result: AIChatResult) =>
@@ -128,6 +149,8 @@ export function PromptDock({
     beginPendingWork,
     text,
     config,
+    editorKey,
+    preview,
   } = useEditorController();
   const [draft, setDraft] = useState(""),
     [note, setNote] = useState(""),
@@ -140,15 +163,55 @@ export function PromptDock({
   const box = useRef<HTMLTextAreaElement>(null),
     mirror = useRef<HTMLDivElement>(null),
     list = useRef<HTMLOListElement>(null);
-  // The page as it stood after each applied proposal, so "undo" only steps back over that one.
-  const undos = useRef(
-    new Map<number, { doc: Editor["state"]["doc"] | null; header: Partial<Snapshot> }>(),
-  );
+  // The page around each applied proposal, so "undo" only steps back over that one. It lives with
+  // this view, as the editor's undo history does: back on the page, an applied edit stays applied.
+  const undos = useRef(new Map<number, Applied>());
+  const latest = useRef({ snapshot, updateDraft });
+  latest.current = { snapshot, updateDraft };
   const inset = useKeyboardInset();
   const emptyPage = !text.trim();
   useEffect(() => {
-    threads.set(post.id, turns);
-  }, [post.id, turns]);
+    views.set(post.id, setTurns);
+    setTurns(threads.get(post.id) ?? []);
+    return () => {
+      if (views.get(post.id) === setTurns) views.delete(post.id);
+    };
+  }, [post.id]);
+  // Selections asked about move with the page, and cmd+z back over an applied edit takes its
+  // title and subtitle along and reopens it. The editor turns up a moment after this box does.
+  useEffect(() => {
+    let editor: Editor | null = null,
+      frame = 0;
+    const follow = ({
+      transaction,
+      appendedTransactions,
+    }: {
+      transaction: Transaction;
+      appendedTransactions: Transaction[];
+    }) => {
+      const all = [transaction, ...appendedTransactions];
+      for (const turn of threads.get(post.id) ?? []) followTarget(turn.target, all);
+      const doc = all.at(-1)!.doc;
+      if (doc === transaction.before) return;
+      for (const [id, saved] of undos.current)
+        if (saved.before?.content.size === doc.content.size && saved.before.eq(doc)) {
+          undos.current.delete(id);
+          restoreHeader(saved);
+          update(id, { proposal: "open", notice: undefined });
+        }
+    };
+    const attach = () => {
+      editor = editorRef.current;
+      if (!editor || editor.isDestroyed) return void (frame = requestAnimationFrame(attach));
+      for (const turn of threads.get(post.id) ?? []) rebaseTarget(turn.target, editor.state.doc);
+      editor.on("transaction", follow);
+    };
+    attach();
+    return () => {
+      cancelAnimationFrame(frame);
+      editor?.off("transaction", follow);
+    };
+  }, [post.id, editorRef, editorKey, preview]);
   useEffect(() => {
     if (context) contexts.set(post.id, context);
     else contexts.delete(post.id);
@@ -165,7 +228,9 @@ export function PromptDock({
   }, [turns.length, open]);
 
   function update(id: number, patch: Partial<Turn>) {
-    setTurns((all) => all.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)));
+    changeThread(post.id, (all) =>
+      all.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)),
+    );
   }
   const waiting = turns.find((turn) => turn.state === "waiting");
   const thinking = turns.some((turn) => turn.state === "waiting" || turn.state === "sending");
@@ -275,7 +340,7 @@ export function PromptDock({
         ),
       },
     };
-    setTurns((all) => [...all, turn]);
+    changeThread(post.id, (all) => [...all, turn]);
     setOpen(true);
     void sendTurn(turn);
     return true;
@@ -316,10 +381,26 @@ export function PromptDock({
     if (!editor || editor.isDestroyed || !result) return;
     if (busy || isOperationBlocked())
       return update(turn.id, { notice: "the page is busy. try again in a moment." });
-    if (result.edit !== null && !whole && !targetHolds(editor, turn.target, turn.request.text))
-      return update(turn.id, { proposal: "stale", notice: undefined });
+    // A title or subtitle the writer changed since asking stays theirs; the card says so first.
+    const changed = (["title", "subtitle"] as const).filter(
+      (key) => result[key] !== null && snapshot[key] !== turn.request[key],
+    );
+    const body =
+      result.edit !== null && !whole && !targetHolds(editor, turn.target, turn.request.text);
+    if (body || changed.some((key) => !turn.stale?.includes(key))) {
+      const stale = new Set<Stale>([
+        ...(turn.stale ?? []),
+        ...changed,
+        ...(body ? ["body" as const] : []),
+      ]);
+      return update(turn.id, {
+        proposal: "stale",
+        stale: (["title", "subtitle", "body"] as const).filter((part) => stale.has(part)),
+        notice: undefined,
+      });
+    }
     const patch: Partial<Snapshot> = {};
-    if (result.title !== null) {
+    if (result.title !== null && !changed.includes("title")) {
       patch.title = result.title.replace(/\s+/g, " ").trim().slice(0, limits.title);
       // An unpublished page's address follows its title, as typing a title does.
       if (
@@ -328,25 +409,46 @@ export function PromptDock({
       )
         patch.slug = slugify(patch.title);
     }
-    if (result.subtitle !== null) patch.subtitle = result.subtitle.slice(0, limits.subtitle);
+    if (result.subtitle !== null && !changed.includes("subtitle"))
+      patch.subtitle = result.subtitle.slice(0, limits.subtitle);
     const header = Object.fromEntries(
       Object.keys(patch).map((key) => [key, snapshot[key as keyof Snapshot]]),
     ) as Partial<Snapshot>;
+    const before = result.edit !== null ? editor.state.doc : null;
     if (result.edit !== null)
       replaceWithMarkdown(editor, whole ? { scope: "page" } : turn.target, result.edit);
     if (Object.keys(patch).length) updateDraft(patch);
-    undos.current.set(turn.id, { doc: result.edit !== null ? editor.state.doc : null, header });
-    update(turn.id, { proposal: "applied", notice: undefined });
+    undos.current.set(turn.id, {
+      before,
+      after: before && editor.state.doc,
+      header,
+      applied: patch,
+    });
+    update(turn.id, { proposal: "applied", stale: undefined, notice: undefined });
+  }
+  /** Puts back the title, subtitle and address an applied proposal replaced, each only while it
+   * still reads as applied: one the writer has changed since stays theirs. */
+  function restoreHeader(saved: Applied) {
+    const { snapshot, updateDraft } = latest.current;
+    const patch = Object.fromEntries(
+      Object.entries(saved.header).filter(
+        ([key]) => snapshot[key as keyof Snapshot] === saved.applied[key as keyof Snapshot],
+      ),
+    ) as Partial<Snapshot>;
+    if (Object.keys(patch).length) updateDraft(patch);
   }
   function undo(turn: Turn) {
     const editor = editorRef.current,
       saved = undos.current.get(turn.id);
     if (!editor || editor.isDestroyed || !saved) return;
-    if (saved.doc && editor.state.doc !== saved.doc)
+    if (busy || isOperationBlocked())
+      return update(turn.id, { notice: "the page is busy. try again in a moment." });
+    if (saved.after && editor.state.doc !== saved.after)
       return update(turn.id, { notice: "the page changed since. press cmd+z to step back." });
-    if (saved.doc) editor.commands.undo();
-    if (Object.keys(saved.header).length) updateDraft(saved.header);
+    // Gone first, so the editor's own undo below doesn't count as cmd+z over it.
     undos.current.delete(turn.id);
+    if (saved.after) editor.commands.undo();
+    restoreHeader(saved);
     update(turn.id, { proposal: "open", notice: undefined });
   }
   function copy(turn: Turn) {
@@ -454,7 +556,7 @@ export function PromptDock({
                 type="button"
                 aria-label="Clear chat"
                 onClick={() => {
-                  setTurns([]);
+                  changeThread(post.id, () => []);
                   undos.current.clear();
                 }}
                 className={cn(quietButton, "size-7 justify-center px-0")}
@@ -481,6 +583,8 @@ export function PromptDock({
                   </div>
                   <Answer
                     turn={turn}
+                    undoable={undos.current.has(turn.id)}
+                    busy={busy}
                     onRetry={() => retry(turn)}
                     onApply={(whole) => apply(turn, whole)}
                     onDiscard={() => update(turn.id, { proposal: "discarded", notice: undefined })}
@@ -744,6 +848,8 @@ export function PromptDock({
 /** jot ai's side of one turn: thinking, an error with retry, or the reply and any proposal. */
 function Answer({
   turn,
+  undoable,
+  busy,
   onRetry,
   onApply,
   onDiscard,
@@ -751,6 +857,8 @@ function Answer({
   onCopy,
 }: {
   turn: Turn;
+  undoable: boolean;
+  busy: boolean;
   onRetry: () => void;
   onApply: (whole?: boolean) => void;
   onDiscard: () => void;
@@ -798,6 +906,8 @@ function Answer({
               <Proposal
                 turn={turn}
                 result={result}
+                undoable={undoable}
+                busy={busy}
                 onApply={onApply}
                 onDiscard={onDiscard}
                 onUndo={onUndo}
@@ -815,6 +925,8 @@ function Answer({
 function Proposal({
   turn,
   result,
+  undoable,
+  busy,
   onApply,
   onDiscard,
   onUndo,
@@ -822,6 +934,10 @@ function Proposal({
 }: {
   turn: Turn;
   result: AIChatResult;
+  /** Whether undo can still step back over it: not once the page has been closed and reopened. */
+  undoable: boolean;
+  /** The page is saving for publishing or similar, which undo waits for. */
+  busy: boolean;
   onApply: (whole?: boolean) => void;
   onDiscard: () => void;
   onUndo: () => void;
@@ -835,6 +951,8 @@ function Proposal({
   ].filter(Boolean);
   const before = countWords(turn.request.text),
     after = result.edit === null ? 0 : countWords(result.edit);
+  const stale = turn.stale ?? [];
+  const fresh = parts.filter((part) => !stale.includes(part === scope ? "body" : (part as Stale)));
   return (
     <div aria-label="Proposed edit" role="group" className="mt-2 rounded-xl bg-background p-2.5">
       <p className="flex flex-wrap items-center gap-x-1.5 text-xs">
@@ -884,14 +1002,21 @@ function Proposal({
         {turn.proposal === "stale" && (
           <>
             <p className="w-full text-xs text-muted-foreground">
-              the page changed since you asked.
+              the {stale.map((part) => (part === "body" ? "page" : part)).join(" and ")} changed
+              since you asked.
             </p>
             {/* A selection's edit covers only that part, so it never replaces the page. */}
-            {turn.request.scope === "page" && (
-              <button type="button" onClick={() => onApply(true)} className={darkButton}>
-                replace the whole page
-              </button>
-            )}
+            {stale.includes("body")
+              ? turn.request.scope === "page" && (
+                  <button type="button" onClick={() => onApply(true)} className={darkButton}>
+                    replace the whole page
+                  </button>
+                )
+              : fresh.length > 0 && (
+                  <button type="button" onClick={() => onApply()} className={darkButton}>
+                    apply the {fresh.join(" and ")}
+                  </button>
+                )}
             <button type="button" onClick={onCopy} className={quietButton}>
               <Copy weight="bold" aria-hidden="true" className="size-3.5" />
               copy
@@ -907,9 +1032,11 @@ function Proposal({
               <Check weight="bold" aria-hidden="true" className="size-3.5" />
               applied
             </span>
-            <button type="button" onClick={onUndo} className={quietButton}>
-              undo
-            </button>
+            {undoable && (
+              <button type="button" onClick={onUndo} disabled={busy} className={quietButton}>
+                undo
+              </button>
+            )}
           </>
         )}
         {turn.proposal === "discarded" && (

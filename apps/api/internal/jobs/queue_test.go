@@ -137,3 +137,32 @@ func TestAIJobsOutlastALongAnswer(t *testing.T) {
 		t.Fatal("AI job deadline must end before its 5 minute lease")
 	}
 }
+
+func TestLanesClaimOnlyTheirOwnKinds(t *testing.T) {
+	w := testWorker(t)
+	ctx := context.Background()
+	ai := insertJob(t, w)
+	if job, err := w.ClaimLane(ctx, false); err != nil || job != nil {
+		t.Fatalf("email lane claimed an AI job: job=%v error=%v", job, err)
+	}
+	email := uuid.NewString()
+	if _, err := w.DB.Exec(ctx, `INSERT INTO jobs(id,kind,payload,idempotency_key)VALUES($1,'verification','{}',$2)`, email, email); err != nil {
+		t.Fatal(err)
+	}
+	aiJob, err := w.ClaimLane(ctx, true)
+	if err != nil || aiJob == nil || aiJob.ID != ai {
+		t.Fatalf("AI lane claim: job=%v error=%v", aiJob, err)
+	}
+	if job, err := w.ClaimLane(ctx, true); err != nil || job != nil {
+		t.Fatalf("AI lane claimed an email job: job=%v error=%v", job, err)
+	}
+	// The AI job is still running under its lease; the email lane takes the email alongside it.
+	emailJob, err := w.ClaimLane(ctx, false)
+	if err != nil || emailJob == nil || emailJob.ID != email {
+		t.Fatalf("email lane claim: job=%v error=%v", emailJob, err)
+	}
+	var running int
+	if err = w.DB.QueryRow(ctx, `SELECT count(*) FROM jobs WHERE status='running'`).Scan(&running); err != nil || running != 2 {
+		t.Fatalf("running=%d error=%v", running, err)
+	}
+}

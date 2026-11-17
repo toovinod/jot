@@ -201,7 +201,7 @@ function DiscoverContent() {
               body="be the first to publish something worth reading."
               action={
                 <Button asChild>
-                  <Link href={user ? "/dashboard?new=1" : "/signup"}>start writing</Link>
+                  <Link href={user ? "/editor/new" : "/signup"}>start writing</Link>
                 </Button>
               }
             />

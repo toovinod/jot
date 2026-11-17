@@ -1,8 +1,8 @@
 "use client";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { postPath, type Post, type PostSummary } from "@jot/contracts";
+import { postPath, type PostSummary } from "@jot/contracts";
 import {
   ArrowUpRight,
   BookmarkSimple,
@@ -15,7 +15,6 @@ import {
   Plus,
 } from "@phosphor-icons/react";
 import { api } from "@/lib/api";
-import { friendlyError } from "@/lib/errors";
 import { usePostCollection } from "@/hooks/use-post-collection";
 import { cn, date } from "@/lib/utils";
 import {
@@ -172,24 +171,9 @@ function DashboardContent() {
   const tab = search.get("tab") === "bookmarks" ? "bookmarks" : "mine";
   const [filter, setFilter] = useState<Filter>("all"),
     [query, setQuery] = useState(""),
-    [searched, setSearched] = useState(false),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const creatingStory = useRef(false);
-  async function createStory() {
-    if (creatingStory.current) return;
-    creatingStory.current = true;
-    setBusy(true);
-    setError("");
-    try {
-      const post = await api<Post>("/posts", { method: "POST" });
-      router.push(`/editor/${post.id}`);
-    } catch (e) {
-      setError(friendlyError(e, { auto: false }).message);
-      setBusy(false);
-      creatingStory.current = false;
-    }
-  }
+    [searched, setSearched] = useState(false);
+  // The editor makes the page while it shows its own loading frame, so this opens at once.
+  const createStory = () => router.push("/editor/new");
   const term = tab === "mine" ? query.trim() : "";
   const {
     items: posts,
@@ -204,10 +188,8 @@ function DashboardContent() {
   );
   const { stats, failed } = useStats(tab === "mine");
   useEffect(() => {
-    if (new URLSearchParams(location.search).get("new") === "1") {
-      history.replaceState(null, "", "/dashboard");
-      void createStory();
-    }
+    // Older "new page" links point here.
+    if (new URLSearchParams(location.search).get("new") === "1") router.replace("/editor/new");
   }, [search]);
   const visible = posts.filter((post) => matches(post, filter));
   // Once the writer searches, keep the search box mounted so typing never loses focus.
@@ -262,9 +244,9 @@ function DashboardContent() {
         }
         actions={
           tab === "mine" ? (
-            <Button onClick={createStory} disabled={busy}>
+            <Button onClick={createStory}>
               <Plus weight="bold" />
-              {busy ? "opening a blank page…" : "new page"}
+              new page
             </Button>
           ) : (
             <Button variant="outline" asChild>
@@ -375,7 +357,7 @@ function DashboardContent() {
           </div>
         )}
         <div className="mt-5 empty:hidden">
-          <ErrorMessage message={error || loadError} />
+          <ErrorMessage message={loadError} />
         </div>
         <div className="mt-5 empty:hidden">
           {loading && !posts.length && !toolbar ? (
@@ -437,7 +419,7 @@ function DashboardContent() {
             </Button>
           </div>
         )}
-        {!loading && !posts.length && !term && !error && !loadError && (
+        {!loading && !posts.length && !term && !loadError && (
           <EmptyState
             className="mt-5"
             critter={tab === "bookmarks" ? "bookmark" : "pencil"}
@@ -445,7 +427,7 @@ function DashboardContent() {
             body={tab === "bookmarks" ? "use the bookmark on any page to keep it here." : undefined}
             action={
               tab === "mine" ? (
-                <Button onClick={createStory} disabled={busy}>
+                <Button onClick={createStory}>
                   <Plus weight="bold" />
                   write something
                 </Button>

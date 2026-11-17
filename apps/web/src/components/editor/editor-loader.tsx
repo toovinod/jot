@@ -45,7 +45,7 @@ export function EditorLoader({ id }: { id: string }) {
   return <EditorWorkspace initial={post} />;
 }
 /** While a page opens, the pages pane already shows, so moving between pages doesn't blink. */
-function LoadingFrame({ id }: { id: string }) {
+export function LoadingFrame({ id = "" }: { id?: string }) {
   const router = useRouter();
   const pages = usePagesPane();
   return (

@@ -22,9 +22,10 @@ for (const [name, value] of Object.entries({
   Object.defineProperty(globalThis, name, { value, configurable: true });
 // Other files mock next/navigation for the whole run, so this one records pushes the same way.
 let pushed: string[] = [];
+let replaced: string[] = [];
 const router = {
   push: (path: string) => pushed.push(path),
-  replace() {},
+  replace: (path: string) => replaced.push(path),
   prefetch() {},
   back() {},
   forward() {},
@@ -332,5 +333,66 @@ describe("the workspace", () => {
       expect(container.querySelector(id)!.className).toContain(
         "placeholder:text-muted-foreground/75",
       );
+  });
+});
+
+describe("a new page", () => {
+  async function open(create: () => Promise<Response>) {
+    replaced = [];
+    const creates: string[] = [];
+    globalThis.fetch = (async (url, options) => {
+      const path = String(url);
+      if (path.endsWith("/me")) return Response.json(author);
+      if (path.endsWith("/config"))
+        return Response.json({ aiEnabled: false, emailEnabled: false, domainTarget: "" });
+      if (path.includes("/posts?scope=mine")) return Response.json({ posts: [] });
+      if (options?.method === "POST" && path.endsWith("/posts")) {
+        creates.push(path);
+        return create();
+      }
+      return Response.json({}, { status: 404 });
+    }) as typeof fetch;
+    const { NewPage } = await import("../src/components/editor/new-page");
+    const container = document.createElement("div");
+    document.body.replaceChildren(container);
+    root = createRoot(container);
+    await act(async () =>
+      root!.render(
+        <Providers>
+          <AppRouterContext.Provider value={router as never}>
+            <NewPage />
+          </AppRouterContext.Provider>
+        </Providers>,
+      ),
+    );
+    await wait(10);
+    return { container, creates };
+  }
+
+  test("goes straight to the editor frame, makes one page, and replaces itself in history", async () => {
+    const { container, creates } = await open(async () => Response.json({ ...post, id: "fresh" }));
+    expect(creates).toHaveLength(1);
+    expect(replaced).toEqual(["/editor/fresh"]);
+    // The editor's own frame shows meanwhile, never the dashboard.
+    expect(container.textContent).not.toContain("your pages");
+  });
+
+  test("a failed create says why and can try again", async () => {
+    let fail = true;
+    const { container, creates } = await open(async () =>
+      fail
+        ? Response.json({ error: "Too many requests; try again shortly" }, { status: 429 })
+        : Response.json({ ...post, id: "second" }),
+    );
+    expect(container.querySelector('[role="alert"]')).toBeTruthy();
+    expect(replaced).toEqual([]);
+    fail = false;
+    const retry = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "try again",
+    )!;
+    await act(async () => retry.click());
+    await wait(10);
+    expect(creates).toHaveLength(2);
+    expect(replaced).toEqual(["/editor/second"]);
   });
 });

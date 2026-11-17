@@ -39,6 +39,7 @@ type TestEditor = {
   commands: {
     setTextSelection: (range: { from: number; to: number } | number) => boolean;
     insertContentAt: (at: number, text: string) => boolean;
+    toggleBold: () => boolean;
     undo: () => boolean;
   };
 };
@@ -68,11 +69,15 @@ const pageOf = (): Post => ({
   comments: 0,
   views: 0,
 });
-afterEach(async () => {
+/** Leaves the page, as going to another one does; the tab, and its conversations, stay. */
+async function leave() {
   if (root) {
     await act(async () => root!.unmount());
     root = null;
   }
+}
+afterEach(async () => {
+  await leave();
   globalThis.fetch = originalFetch;
   localStorage.clear();
 });
@@ -94,7 +99,9 @@ type Job = { status: string; result?: string; error?: string };
 type Setup = {
   aiEnabled?: boolean;
   /** Answers POST /api/ai/jobs; a job id by default. */
-  create?: (body: AIChatRequest) => Response;
+  create?: (body: AIChatRequest) => Response | Promise<Response>;
+  /** Holds POST /publish open until it settles. */
+  publish?: Promise<unknown>;
   /** What each job id reports when checked. */
   job?: (id: string) => Job;
 };
@@ -103,8 +110,7 @@ const done = (reply: string, edit: string | null = null, extra = {}) => ({
   result: JSON.stringify({ reply, edit, title: null, subtitle: null, ...extra }),
 });
 
-async function mount(setup: Setup = {}) {
-  const page = pageOf();
+async function mount(setup: Setup = {}, page = pageOf()) {
   const calls: string[] = [];
   const asked: AIChatRequest[] = [];
   const saved: string[] = [];
@@ -126,6 +132,8 @@ async function mount(setup: Setup = {}) {
       asked.push(body);
       return setup.create ? setup.create(body) : Response.json({ id: `job-${++jobs}` });
     }
+    if (path.endsWith("/publish") && setup.publish)
+      return setup.publish.then(() => Response.json({ ...page, revision: 90 }));
     const job = /\/ai\/jobs\/(.+)$/.exec(path);
     if (job)
       return Response.json({ id: job[1], ...(setup.job?.(job[1]!) ?? { status: "running" }) });
@@ -353,15 +361,15 @@ describe("the prompt box", () => {
     expect(editor().getText()).toBe("a short walk");
     await click(buttonNamed(card, "undo"));
     expect(editor().getText()).toBe("a long walk");
-    // The writer changes the page before applying: the range no longer holds "long".
-    await act(async () => editor().commands.insertContentAt(1, "on "));
+    // The writer changes the words before applying: the range no longer holds "long".
+    await act(async () => editor().commands.insertContentAt(4, "o"));
     await click(buttonNamed(card, "apply"));
     expect(card.textContent).toContain("the page changed since you asked.");
-    expect(editor().getText()).toBe("on a long walk");
+    expect(editor().getText()).toBe("a loong walk");
     // A selection's edit never replaces the whole page; copy or discard are the ways out.
     expect(buttonNamed(card, "replace the whole page")).toBeFalsy();
     expect(buttonNamed(card, "copy")).toBeTruthy();
-    expect(editor().getText()).toBe("on a long walk");
+    expect(editor().getText()).toBe("a loong walk");
   });
 
   test("context goes with each chat: pasted text, then an attached file", async () => {
@@ -437,5 +445,162 @@ describe("the prompt box", () => {
     expect(thread()!.querySelector('[role="alert"]')!.textContent).toBe("the provider timed out.");
     await click(container.querySelector('button[aria-label="Clear chat"]')!);
     expect(thread()).toBeNull();
+  });
+});
+
+describe("a proposal while the page moves on", () => {
+  const card = (thread: () => Element | null, index = 0) =>
+    thread()!.querySelectorAll('[aria-label="Proposed edit"]')[index]!;
+  const paragraph = (text: string): Post["content"] => ({
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+  });
+  const fields = (container: HTMLElement) => ({
+    title: container.querySelector("#story-title") as HTMLTextAreaElement,
+    subtitle: container.querySelector("#story-subtitle") as HTMLTextAreaElement,
+  });
+  const write = (field: Element, value: string) =>
+    act(async () => handler(field, "onChange")!({ target: { value } }));
+  const post = () =>
+    done("here's a post.", "mornings start slow.", {
+      title: "Slower mornings",
+      subtitle: "a short note",
+    });
+
+  test("a selection edit follows its words when text lands before them, and restyled words are stale", async () => {
+    const { say, thread, editor } = await mount(
+      { job: () => done("try this.", "short") },
+      { ...pageOf(), content: paragraph("long long") },
+    );
+    await act(async () => editor().commands.setTextSelection({ from: 6, to: 10 }));
+    await say("@jotai shorter word");
+    await wait(800);
+    await act(async () => editor().commands.insertContentAt(1, "long "));
+    await click(buttonNamed(card(thread), "apply"));
+    expect(editor().getText()).toBe("long long short");
+    await click(buttonNamed(card(thread), "undo"));
+    expect(editor().getText()).toBe("long long long");
+    // The same words in bold read the same but aren't what was asked about.
+    await act(async () => editor().commands.setTextSelection({ from: 11, to: 15 }));
+    await act(async () => editor().commands.toggleBold());
+    await click(buttonNamed(card(thread), "apply"));
+    expect(card(thread).textContent).toContain("the page changed since you asked.");
+    expect(editor().getText()).toBe("long long long");
+  });
+
+  test("an applied edit is its own undo step, apart from typing just before and after it", async () => {
+    const { say, thread, editor } = await mount({ job: () => done("try this.", "short") });
+    await act(async () => editor().commands.setTextSelection({ from: 3, to: 7 }));
+    await say("@jotai shorter word");
+    await wait(800);
+    await act(async () => editor().commands.insertContentAt(7, "!"));
+    await click(buttonNamed(card(thread), "apply"));
+    expect(editor().getText()).toBe("a short! walk");
+    await act(async () => editor().commands.insertContentAt(8, "?"));
+    await act(async () => editor().commands.undo());
+    expect(editor().getText()).toBe("a short! walk");
+    await act(async () => editor().commands.undo());
+    expect(editor().getText()).toBe("a long! walk");
+  });
+
+  test("undo waits while the page publishes, then steps back and autosaves", async () => {
+    let release = () => {};
+    const { say, thread, editor, container, saved } = await mount({
+      job: () => done("tightened it.", "a brisk walk"),
+      publish: new Promise<void>((resolve) => (release = resolve)),
+    });
+    await say("@jotai tighten");
+    await wait(800);
+    await click(buttonNamed(card(thread), "apply"));
+    await wait(1000);
+    await click(buttonNamed(container.querySelector("header")!, "publish"));
+    await click(
+      buttonNamed(container.querySelector('[aria-label="Publication settings"]')!, "publish"),
+    );
+    await wait(10);
+    const undo = buttonNamed(card(thread), "undo");
+    expect(undo.disabled).toBe(true);
+    await click(undo);
+    expect(editor().getText()).toBe("a brisk walk");
+    expect(card(thread).textContent).toContain("the page is busy. try again in a moment.");
+    await act(async () => release());
+    await wait(10);
+    await click(buttonNamed(card(thread), "undo"));
+    expect(editor().getText()).toBe("a long walk");
+    await wait(1000);
+    expect(saved.at(-1)).toContain('"text":"a long walk"');
+  });
+
+  test("apply leaves a title changed since asking, and undo leaves a subtitle changed since applying", async () => {
+    const { say, thread, editor, container, saved } = await mount({ job: post });
+    const { title, subtitle } = fields(container);
+    await say("@jotai write the post");
+    await wait(800);
+    await write(title, "Quiet mornings");
+    await click(buttonNamed(card(thread), "apply"));
+    expect(card(thread).textContent).toContain("the title changed since you asked.");
+    expect(title.value).toBe("Quiet mornings");
+    expect(editor().getText()).toBe("a long walk");
+    await click(buttonNamed(card(thread), "apply the subtitle and page"));
+    expect(title.value).toBe("Quiet mornings");
+    expect(subtitle.value).toBe("a short note");
+    expect(editor().getText()).toBe("mornings start slow.");
+    await wait(1000);
+    expect(JSON.parse(saved.at(-1)!).slug).toBe("quiet-mornings");
+    await write(subtitle, "my own words");
+    await click(buttonNamed(card(thread), "undo"));
+    expect(editor().getText()).toBe("a long walk");
+    expect(subtitle.value).toBe("my own words");
+    expect(title.value).toBe("Quiet mornings");
+  });
+
+  test("cmd+z over an applied edit steps back its title too and reopens the proposal", async () => {
+    const { say, thread, editor, container } = await mount({ job: post });
+    const { title, subtitle } = fields(container);
+    await say("@jotai write the post");
+    await wait(800);
+    await click(buttonNamed(card(thread), "apply"));
+    expect(title.value).toBe("Slower mornings");
+    await act(async () => editor().commands.undo());
+    expect(editor().getText()).toBe("a long walk");
+    expect(title.value).toBe("Slow mornings");
+    expect(subtitle.value).toBe("");
+    expect(buttonNamed(card(thread), "undo")).toBeFalsy();
+    await click(buttonNamed(card(thread), "apply"));
+    expect(editor().getText()).toBe("mornings start slow.");
+    expect(title.value).toBe("Slower mornings");
+  });
+
+  test("back on the page, an applied edit says so without an undo that can't work", async () => {
+    const setup = { job: () => done("tightened it.", "a brisk walk") };
+    const first = await mount(setup);
+    await first.say("@jotai tighten");
+    await wait(800);
+    await click(buttonNamed(card(first.thread), "apply"));
+    await wait(1000);
+    await leave();
+    const again = await mount(setup, {
+      ...first.page,
+      content: JSON.parse(first.saved.at(-1)!).content,
+    });
+    expect(card(again.thread).textContent).toContain("applied");
+    expect(buttonNamed(card(again.thread), "undo")).toBeFalsy();
+  });
+
+  test("a question sent just before leaving picks up again on return", async () => {
+    let accept = (_: Response) => {};
+    const setup = {
+      create: () => new Promise<Response>((resolve) => (accept = resolve)),
+      job: () => done("still here."),
+    };
+    const first = await mount(setup);
+    await first.say("@jotai hi");
+    await leave();
+    accept(Response.json({ id: "job-7" }));
+    await wait(10);
+    const again = await mount(setup, first.page);
+    await wait(800);
+    expect(again.calls).toContain("GET /api/ai/jobs/job-7");
+    expect(again.thread()!.textContent).toContain("still here.");
   });
 });

@@ -73,7 +73,7 @@ export function Header({
     : user
       ? [
           { label: "dashboard", href: app("/dashboard") },
-          { label: "new page", href: app("/dashboard?new=1"), primary: true },
+          { label: "new page", href: app("/editor/new"), primary: true },
         ]
       : [
           { label: "log in", href: app("/login") },
@@ -120,7 +120,7 @@ export function Header({
                   <Link href={app("/dashboard")}>dashboard</Link>
                 </Button>
                 <Button variant="default" size="sm" asChild className="ml-2 h-9">
-                  <Link href={app("/dashboard?new=1")}>
+                  <Link href={app("/editor/new")}>
                     <Plus weight="bold" />
                     new page
                   </Link>
@@ -340,7 +340,7 @@ function AppNav({ active, onNavigate }: { active: AppSection; onNavigate?: () =>
     <div className="relative flex h-full flex-col overflow-hidden px-3 pb-4 pt-5">
       <Brand className="px-2" />
       <Button asChild className="mx-1 mt-6">
-        <Link href="/dashboard?new=1" onClick={onNavigate}>
+        <Link href="/editor/new" onClick={onNavigate}>
           <Plus weight="bold" />
           new page
         </Link>
@@ -436,7 +436,7 @@ export function AppShell({ active, children }: { active: AppSection; children: R
         <Brand />
         <div className="flex items-center gap-2">
           <IconButton label="New page" asChild>
-            <Link href="/dashboard?new=1">
+            <Link href="/editor/new">
               <Plus weight="bold" />
             </Link>
           </IconButton>

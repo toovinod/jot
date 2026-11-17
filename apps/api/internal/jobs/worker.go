@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,19 +35,34 @@ func New(db *pgxpool.Pool, c *config.Config) *Worker {
 	return &Worker{DB: db, Config: c, Client: &http.Client{Timeout: 45 * time.Second}}
 }
 
+// aiLanes is how many AI jobs run at once. AI jobs run beside the email lane and the scheduled publishing pass,
+// so a slow provider answer never delays sign-in, password reset or newsletter email, or a scheduled post.
+const aiLanes = 2
+
+// Run works the queue until ctx is cancelled. Cancelling also cancels in-flight jobs, which are recorded with
+// Finish, and Run returns once every lane has stopped.
 func (s *Worker) Run(ctx context.Context) error {
-	timer := time.NewTicker(time.Second)
+	var wg sync.WaitGroup
+	for range aiLanes {
+		wg.Go(func() { s.runLane(ctx, true) })
+	}
+	wg.Go(func() { s.runMaintenance(ctx) })
+	s.runLane(ctx, false)
+	wg.Wait()
+	return nil
+}
+
+// runMaintenance publishes due scheduled posts every minute and cleans up expired data every 10 minutes.
+func (s *Worker) runMaintenance(ctx context.Context) {
+	timer := time.NewTicker(time.Minute)
 	defer timer.Stop()
-	lastCleanup, lastSchedule := time.Time{}, time.Time{}
+	lastCleanup := time.Time{}
 	for {
-		if time.Since(lastSchedule) >= time.Minute {
-			publish, cancel := context.WithTimeout(ctx, 30*time.Second)
-			e := s.PublishDue(publish)
-			cancel()
-			if e != nil {
-				slog.Warn("Scheduled publication pass failed", "error", e)
-			}
-			lastSchedule = time.Now()
+		publish, cancel := context.WithTimeout(ctx, 30*time.Second)
+		e := s.PublishDue(publish)
+		cancel()
+		if e != nil {
+			slog.Warn("Scheduled publication pass failed", "error", e)
 		}
 		if time.Since(lastCleanup) > 10*time.Minute {
 			cleanup, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -59,15 +75,28 @@ func (s *Worker) Run(ctx context.Context) error {
 		}
 		select {
 		case <-ctx.Done():
-			return nil
+			return
+		case <-timer.C:
+		}
+	}
+}
+
+// runLane claims and runs AI jobs one at a time when ai is true, and every other kind otherwise.
+func (s *Worker) runLane(ctx context.Context, ai bool) {
+	timer := time.NewTicker(time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
 		default:
 		}
-		j, e := s.Claim(ctx)
+		j, e := s.ClaimLane(ctx, ai)
 		if e != nil {
-			slog.Error("job claim failed", "error", e)
+			slog.Error("job claim failed", "ai", ai, "error", e)
 			select {
 			case <-ctx.Done():
-				return nil
+				return
 			case <-timer.C:
 			}
 			continue
@@ -75,7 +104,7 @@ func (s *Worker) Run(ctx context.Context) error {
 		if j == nil {
 			select {
 			case <-ctx.Done():
-				return nil
+				return
 			case <-timer.C:
 			}
 			continue

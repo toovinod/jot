@@ -1,4 +1,7 @@
 import type { Editor } from "@tiptap/react";
+import { closeHistory } from "@tiptap/pm/history";
+import type { Slice } from "@tiptap/pm/model";
+import type { Transaction } from "@tiptap/pm/state";
 import { aiChatLimits, type AIChatResult, type AIChatTurn, type DocNode } from "@jot/contracts";
 import { markdownBody } from "./editor-controller";
 
@@ -57,37 +60,57 @@ export function readResult(result: string | undefined): AIChatResult {
   return { reply: result || "", edit: null, title: null, subtitle: null };
 }
 
-/** What a chat is about: the page, or the selected range with the text it held when asked. */
+type PageDoc = Editor["state"]["doc"];
+/** What a chat is about: the page, or the selected range with what it held when asked, marks and
+ * all. The range moves with the page (see followTarget); `doc` is the page it last moved over. */
 export type ChatTarget =
-  { scope: "page" } | { scope: "selection"; from: number; to: number; original: string };
+  { scope: "page" } | { scope: "selection"; from: number; to: number; slice: Slice; doc: PageDoc };
 
 const rangeText = (editor: Editor, from: number, to: number) =>
   editor.state.doc.textBetween(from, to, "\n\n", " ");
 
 /** The selected part of the page as Markdown, or the whole page when nothing is selected. */
 export function chatTarget(editor: Editor): { target: ChatTarget; text: string } {
-  const { from, to, empty } = editor.state.selection;
-  const original = empty ? "" : rangeText(editor, from, to);
-  if (!original.trim())
+  const { doc, selection } = editor.state;
+  const { from, to, empty } = selection;
+  if (empty || !rangeText(editor, from, to).trim())
     return { target: { scope: "page" }, text: markdownBody(editor.getJSON() as DocNode) };
-  const slice = editor.state.doc.slice(from, to);
+  const slice = doc.slice(from, to);
   return {
-    target: { scope: "selection", from, to, original },
+    target: { scope: "selection", from, to, slice, doc },
     text: markdownBody({ type: "doc", content: slice.content.toJSON() as DocNode[] }),
   };
 }
 
-/** Whether the page still holds what was asked about: the same text in the selected range, or
- * the same page when the whole page was sent. */
+/** Moves a selection's range over changes to the page, the way they move its text. A range that
+ * missed a change stays on the page it last saw, so it no longer holds (see targetHolds). */
+export function followTarget(target: ChatTarget, transactions: readonly Transaction[]) {
+  if (target.scope !== "selection") return;
+  for (const tr of transactions) {
+    if (tr.before !== target.doc) return;
+    // Text typed right at either edge stays outside the range.
+    target.from = tr.mapping.map(target.from, 1);
+    target.to = tr.mapping.map(target.to, -1);
+    target.doc = tr.doc;
+  }
+}
+/** Picks a range up on a new editor over the same page, as when the page opens again. */
+export function rebaseTarget(target: ChatTarget, doc: PageDoc) {
+  if (target.scope === "selection" && target.doc !== doc && target.doc.eq(doc)) target.doc = doc;
+}
+
+/** Whether the page still holds what was asked about: the same content, marks and all, in the
+ * selected range as it moved, or the same page when the whole page was sent. */
 export function targetHolds(editor: Editor, target: ChatTarget, sent: string) {
   if (target.scope === "page") return markdownBody(editor.getJSON() as DocNode) === sent;
+  const { doc } = editor.state;
   return (
-    target.to <= editor.state.doc.content.size &&
-    rangeText(editor, target.from, target.to) === target.original
+    target.doc === doc &&
+    target.from < target.to &&
+    doc.slice(target.from, target.to).eq(target.slice)
   );
 }
 
-type PageDoc = Editor["state"]["doc"];
 /** The parsed edit opened at its first and last text blocks, the way a copied selection is, so
  * a sentence replaced inside a paragraph joins the text around it instead of splitting it. */
 function openSlice(doc: PageDoc) {
@@ -108,13 +131,15 @@ function openSlice(doc: PageDoc) {
 
 /**
  * Replaces the selected range, or the whole page, with Markdown in one transaction, so a single
- * undo restores it and the editor's update reaches autosave like any typing.
+ * undo restores it and the editor's update reaches autosave like any typing. It is an undo step of
+ * its own: typing just before or after it never joins it.
  */
 export function replaceWithMarkdown(editor: Editor, target: ChatTarget, markdown: string) {
   const parsed = editor.schema.nodeFromJSON(editor.markdown!.parse(markdown));
-  return editor
+  const applied = editor
     .chain()
     .command(({ tr }) => {
+      closeHistory(tr);
       if (target.scope === "selection") tr.replace(target.from, target.to, openSlice(parsed));
       else
         tr.replaceWith(
@@ -125,4 +150,6 @@ export function replaceWithMarkdown(editor: Editor, target: ChatTarget, markdown
       return true;
     })
     .run();
+  editor.view.dispatch(closeHistory(editor.state.tr));
+  return applied;
 }

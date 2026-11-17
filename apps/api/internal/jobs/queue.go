@@ -18,7 +18,14 @@ type Job struct {
 	FirstAttempt                                 time.Time
 }
 
-func (s *Worker) Claim(ctx context.Context) (*Job, error) {
+// Claim takes the next due job of any kind.
+func (s *Worker) Claim(ctx context.Context) (*Job, error) { return s.claim(ctx, nil) }
+
+// ClaimLane takes the next due AI job when ai is true, and the next due job of any other kind otherwise,
+// so Run's AI lanes and its email lane never take each other's work.
+func (s *Worker) ClaimLane(ctx context.Context, ai bool) (*Job, error) { return s.claim(ctx, &ai) }
+
+func (s *Worker) claim(ctx context.Context, ai *bool) (*Job, error) {
 	tx, e := s.DB.Begin(ctx)
 	if e != nil {
 		return nil, e
@@ -31,7 +38,7 @@ func (s *Worker) Claim(ctx context.Context) (*Job, error) {
 	j := Job{}
 	raw := []byte{}
 	lease := uuid.NewString()
-	e = tx.QueryRow(ctx, `WITH next AS(SELECT id FROM jobs WHERE ((status='pending' AND available_at<=now()) OR(status='running' AND lease_until<now())) AND attempts<5 AND (first_attempt_at IS NULL OR first_attempt_at>now()-interval '23 hours') ORDER BY available_at,created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs j SET status='running',attempts=attempts+1,first_attempt_at=COALESCE(first_attempt_at,now()),lease_until=now()+CASE WHEN j.kind='ai' THEN interval '5 minutes' ELSE interval '2 minutes' END,lease_token=$1,updated_at=now() FROM next WHERE j.id=next.id RETURNING j.id,j.kind,COALESCE(j.user_id::text,''),j.payload,j.attempts,j.first_attempt_at,j.idempotency_key`, lease).Scan(&j.ID, &j.Kind, &j.UserID, &raw, &j.Attempts, &j.FirstAttempt, &j.IdempotencyKey)
+	e = tx.QueryRow(ctx, `WITH next AS(SELECT id FROM jobs WHERE ((status='pending' AND available_at<=now()) OR(status='running' AND lease_until<now())) AND attempts<5 AND (first_attempt_at IS NULL OR first_attempt_at>now()-interval '23 hours') AND ($2::bool IS NULL OR (kind='ai')=$2) ORDER BY available_at,created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs j SET status='running',attempts=attempts+1,first_attempt_at=COALESCE(first_attempt_at,now()),lease_until=now()+CASE WHEN j.kind='ai' THEN interval '5 minutes' ELSE interval '2 minutes' END,lease_token=$1,updated_at=now() FROM next WHERE j.id=next.id RETURNING j.id,j.kind,COALESCE(j.user_id::text,''),j.payload,j.attempts,j.first_attempt_at,j.idempotency_key`, lease, ai).Scan(&j.ID, &j.Kind, &j.UserID, &raw, &j.Attempts, &j.FirstAttempt, &j.IdempotencyKey)
 	if errors.Is(e, pgx.ErrNoRows) {
 		if e = tx.Commit(ctx); e != nil {
 			return nil, e

@@ -88,7 +88,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             setUser(user);
             const next = new URLSearchParams(location.search).get("next");
             router.replace(
-              safeReturnPath(next, location.origin) || (signup ? "/dashboard?new=1" : "/dashboard"),
+              safeReturnPath(next, location.origin) || (signup ? "/editor/new" : "/dashboard"),
             );
           } catch (e) {
             setError(friendlyError(e, { auto: false }).message);

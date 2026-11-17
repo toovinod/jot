@@ -28,5 +28,5 @@ export function Reveal({
 /** Where "start writing" goes: a new page for writers, signup for everyone else. */
 export function useStartHref() {
   const { user } = useSession();
-  return user ? "/dashboard?new=1" : "/signup";
+  return user ? "/editor/new" : "/signup";
 }

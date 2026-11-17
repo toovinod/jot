@@ -83,7 +83,7 @@ test("the app shell marks the current section and offers a new page", async () =
   const anchor = (href: string) => html.match(new RegExp(`<a[^>]*href="${href}"[^>]*>`))![0];
   expect(anchor("/dashboard\\?tab=bookmarks")).toContain('aria-current="page"');
   expect(anchor("/settings")).not.toContain("aria-current");
-  expect(html).toContain('href="/dashboard?new=1"');
+  expect(html).toContain('href="/editor/new"');
   expect(html).toContain('aria-label="Open menu"');
   expect(text(html)).toContain("your writing");
   expect(html).toContain("<p>body</p>");
