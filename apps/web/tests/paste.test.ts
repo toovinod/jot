@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { Window } from "happy-dom";
-import { cleanClipboardHTML } from "../src/lib/paste";
+import { cleanClipboardHTML, pasteAsMarkdown } from "../src/lib/paste";
 beforeAll(() => {
   const window = new Window();
   Object.defineProperty(globalThis, "DOMParser", { value: window.DOMParser, configurable: true });
@@ -55,5 +55,25 @@ describe("rich clipboard import", () => {
     expect(html).not.toContain("data:");
     expect(html).not.toContain("blob:");
     expect(warning).not.toBeNull();
+  });
+});
+describe("markdown paste", () => {
+  const markdown = "# Notes\n\n- one\n- two\n\n**bold** words";
+  test("styled spans from a code editor like VS Code give way to the Markdown text", () => {
+    const vscode =
+      '<meta charset="utf-8"><div style="color: #cccccc;background-color: #1f1f1f;font-family: Menlo, monospace;font-weight: normal;font-size: 12px;line-height: 18px;white-space: pre;"><div><span style="color: #569cd6;font-weight: bold;"># Notes</span></div><br><div><span style="color: #6796e6;">-</span><span style="color: #cccccc;"> one</span></div><div><span style="color: #6796e6;">-</span><span style="color: #cccccc;"> two</span></div><br><div><span style="color: #569cd6;font-weight: bold;">**bold**</span><span style="color: #cccccc;"> words</span></div></div>';
+    expect(pasteAsMarkdown(vscode, markdown)).toBe(true);
+    expect(pasteAsMarkdown("", markdown)).toBe(true);
+  });
+  test("HTML with its own structure is kept, and plain prose is not read as Markdown", () => {
+    for (const html of [
+      "<h1>Notes</h1><ul><li>one</li></ul>",
+      '<p>see <a href="https://example.org">this</a></p>',
+      "<pre><code>- one</code></pre>",
+      "<blockquote>- one</blockquote>",
+      "<table><tr><td>| a |</td></tr></table>",
+    ])
+      expect(pasteAsMarkdown(html, markdown)).toBe(false);
+    expect(pasteAsMarkdown("<span>A quiet thought.</span>", "A quiet thought.")).toBe(false);
   });
 });

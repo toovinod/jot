@@ -14,20 +14,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jot-project/jot/apps/api/internal/domain"
+	"github.com/jot-project/jot/apps/api/internal/publishing"
 )
 
-const postAuthorAndCounts = `u.id,u.username,u.name,u.bio,u.avatar,(SELECT count(*) FROM likes l WHERE l.post_id=p.id),(SELECT count(*) FROM comments c WHERE c.post_id=p.id) FROM posts p JOIN users u ON u.id=p.author_id `
-const postSelect = `SELECT p.id,p.draft,p.revision,p.created_at,p.updated_at,p.published_at,p.published,COALESCE(p.first_published_slug,''),` + postAuthorAndCounts
-const publicPostSelect = `SELECT p.id,p.published,0,p.created_at,p.published_at,p.published_at,NULL::jsonb,''::text,` + postAuthorAndCounts
-const ownedSummarySelect = `SELECT p.id,p.draft_summary,p.revision,p.created_at,p.updated_at,p.published_at,COALESCE(p.first_published_slug,''),p.published IS NOT NULL,` + postAuthorAndCounts
-const publicSummarySelect = `SELECT p.id,p.published_summary,0,p.created_at,p.published_at,p.published_at,''::text,true,` + postAuthorAndCounts
+const postAuthorAndCounts = `u.id,u.username,u.name,u.bio,u.avatar,(SELECT count(*) FROM likes l WHERE l.post_id=p.id),(SELECT count(*) FROM comments c LEFT JOIN comments t ON t.id=c.parent_id WHERE c.post_id=p.id AND NOT EXISTS(SELECT 1 FROM comment_blocks b WHERE b.author_id=p.author_id AND b.blocked_user_id IN(c.user_id,t.user_id))) FROM posts p JOIN users u ON u.id=p.author_id `
+const postSelect = `SELECT p.id,p.draft,p.revision,p.created_at,p.updated_at,p.published_at,p.published,COALESCE(p.first_published_slug,''),p.views,p.scheduled_at,COALESCE(p.share_token,''),COALESCE(p.schedule_error,''),` + postAuthorAndCounts
+const publicPostSelect = `SELECT p.id,p.published,0,p.created_at,p.published_at,p.published_at,NULL::jsonb,''::text,p.views,NULL::timestamptz,''::text,''::text,` + postAuthorAndCounts
+const ownedSummarySelect = `SELECT p.id,p.draft_summary,p.revision,p.created_at,p.updated_at,p.published_at,COALESCE(p.first_published_slug,''),p.published IS NOT NULL,p.views,p.scheduled_at,COALESCE(p.published_summary->>'visibility',''),COALESCE(p.schedule_error,''),` + postAuthorAndCounts
+const publicSummarySelect = `SELECT p.id,p.published_summary,0,p.created_at,p.published_at,p.published_at,''::text,true,p.views,NULL::timestamptz,COALESCE(p.published_summary->>'visibility',''),''::text,` + postAuthorAndCounts
 
 type scanner interface{ Scan(...any) error }
 
 func scanPostRow(row scanner, public bool) (domain.Post, error) {
 	var p domain.Post
 	var draft, pub []byte
-	e := row.Scan(&p.ID, &draft, &p.Revision, &p.CreatedAt, &p.UpdatedAt, &p.PublishedAt, &pub, &p.ReservedSlug, &p.Author.ID, &p.Author.Username, &p.Author.Name, &p.Author.Bio, &p.Author.Avatar, &p.Likes, &p.Comments)
+	e := row.Scan(&p.ID, &draft, &p.Revision, &p.CreatedAt, &p.UpdatedAt, &p.PublishedAt, &pub, &p.ReservedSlug, &p.Views, &p.ScheduledAt, &p.ShareToken, &p.ScheduleError, &p.Author.ID, &p.Author.Username, &p.Author.Name, &p.Author.Bio, &p.Author.Avatar, &p.Likes, &p.Comments)
 	if e != nil {
 		return p, e
 	}
@@ -97,7 +98,7 @@ func (s *Server) savePost(w http.ResponseWriter, r *http.Request) {
 		domain.Snapshot
 		Revision int `json:"revision"`
 	}
-	if !decodeJSONBody(w, r, &in) {
+	if !decodeJSONBodyLimit(w, r, &in, maxPostBodyBytes) {
 		return
 	}
 	if e := domain.ValidateSnapshot(in.Snapshot, false); e != nil {
@@ -160,84 +161,39 @@ func (s *Server) changePublication(w http.ResponseWriter, r *http.Request, publi
 		return
 	}
 	defer tx.Rollback(r.Context())
-	var raw []byte
-	var revision int
-	var reservedSlug *string
-	e = tx.QueryRow(r.Context(), `SELECT draft,revision,first_published_slug FROM posts WHERE id=$1 AND author_id=$2 FOR UPDATE`, id, u.ID).Scan(&raw, &revision, &reservedSlug)
-	if isNotFound(e) {
-		notFound(w)
-		return
-	}
-	if e != nil {
-		writeInternalError(w, e)
-		return
-	}
-	if revision != in.Revision {
-		writeError(w, 409, "Draft revision changed; reload before publishing", "revision_conflict")
-		return
-	}
 	if publish {
-		var sn domain.Snapshot
-		if e = json.Unmarshal(raw, &sn); e != nil {
-			writeInternalError(w, e)
+		if e = publishing.Publish(r.Context(), tx, s.Config, u, id, in.Revision, in.EmailSubscribers); e != nil {
+			writePublishError(w, e)
 			return
 		}
-		if e = domain.ValidateSnapshot(sn, true); e != nil {
-			writeError(w, 400, e.Error(), "validation")
-			return
-		}
-		if in.EmailSubscribers && (sn.Visibility != "public" || !s.Config.EmailEnabled()) {
-			writeError(w, 400, "Email delivery requires a public post and configured email provider", "email_unavailable")
-			return
-		}
-		if reservedSlug != nil && *reservedSlug != sn.Slug {
-			writeError(w, 400, "Published post slugs remain stable", "stable_slug")
-			return
-		}
-		_, e = tx.Exec(r.Context(), `UPDATE posts SET published=$3,published_summary=$5,first_published_slug=COALESCE(first_published_slug,$4),published_at=now(),updated_at=now(),revision=revision+1 WHERE id=$1 AND author_id=$2`, id, u.ID, raw, sn.Slug, encodeJSON(domain.SummarizeSnapshot(sn)))
-		if isUniqueViolation(e) {
-			writeError(w, 409, "This slug is reserved by another post; choose another", "slug_conflict")
-			return
-		}
-		if e != nil {
-			writeInternalError(w, e)
-			return
-		}
-		if sn.Visibility == "unlisted" {
-			if _, e = tx.Exec(r.Context(), `UPDATE jobs SET status='failed',error='Publication is no longer public',lease_token=NULL,lease_until=NULL,updated_at=now() WHERE kind='newsletter' AND payload->>'postId'=$1 AND status IN('pending','running')`, id); e != nil {
-				writeInternalError(w, e)
-				return
-			}
-		}
-		var version int64
-		if e = tx.QueryRow(r.Context(), `INSERT INTO revisions(post_id,snapshot) VALUES($1,$2) RETURNING id`, id, raw).Scan(&version); e != nil {
-			writeInternalError(w, e)
-			return
-		}
-		if in.EmailSubscribers {
-			if e = s.enqueueNewsletter(r.Context(), tx, u, id, sn, version); errors.Is(e, errEmailUnverified) {
-				writeError(w, 403, e.Error(), "email_unverified")
-				return
-			} else if errors.Is(e, errNewsletterBudget) {
-				writeError(w, 429, e.Error(), "newsletter_budget")
-				return
-			} else if e != nil {
-				writeInternalError(w, e)
-				return
-			}
-		}
-
 	} else {
-		_, e = tx.Exec(r.Context(), `UPDATE posts SET published=NULL,published_summary=NULL,published_at=NULL,updated_at=now(),revision=revision+1 WHERE id=$1`, id)
+		var revision int
+		e = tx.QueryRow(r.Context(), `SELECT revision FROM posts WHERE id=$1 AND author_id=$2 FOR UPDATE`, id, u.ID).Scan(&revision)
+		if e == nil && revision != in.Revision {
+			e = publishing.ErrRevision
+		}
+		if e == nil {
+			_, e = tx.Exec(r.Context(), `UPDATE posts SET published=NULL,published_summary=NULL,published_at=NULL,scheduled_at=NULL,schedule_email=false,updated_at=now(),revision=revision+1 WHERE id=$1`, id)
+		}
 		if e == nil {
 			_, e = tx.Exec(r.Context(), `UPDATE jobs SET status='failed',error='Publication removed',lease_token=NULL,lease_until=NULL,updated_at=now() WHERE kind='newsletter' AND payload->>'postId'=$1 AND status IN ('pending','running')`, id)
 		}
 		if e != nil {
-			writeInternalError(w, e)
+			writePublishError(w, e)
 			return
 		}
 	}
 	s.commitPostAndRespond(w, r, tx, id, u.ID)
+}
+func writePublishError(w http.ResponseWriter, e error) {
+	var refusal publishing.Error
+	if errors.As(e, &refusal) {
+		writeError(w, refusal.Status, refusal.Message, refusal.Code)
+	} else if isNotFound(e) {
+		notFound(w)
+	} else {
+		writeInternalError(w, e)
+	}
 }
 func (s *Server) deletePost(w http.ResponseWriter, r *http.Request) {
 	u, ok := requireUser(w, r)
@@ -269,7 +225,7 @@ func (s *Server) deletePost(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, e)
 		return
 	}
-	_, e = tx.Exec(r.Context(), `UPDATE jobs SET status='failed',payload=jsonb_build_object('postId',$1::text),result=NULL,error='Source post was deleted',lease_token=NULL,lease_until=NULL,updated_at=now() WHERE kind='ai' AND user_id=$2 AND payload->>'postId'=$1`, id, u.ID)
+	_, e = tx.Exec(r.Context(), `UPDATE jobs SET status='failed',payload=jsonb_strip_nulls(jsonb_build_object('postId',$1::text,'mode',payload->>'mode')),result=NULL,error='Source post was deleted',lease_token=NULL,lease_until=NULL,updated_at=now() WHERE kind='ai' AND user_id=$2 AND payload->>'postId'=$1`, id, u.ID)
 	if e != nil {
 		writeInternalError(w, e)
 		return
@@ -316,6 +272,18 @@ func (s *Server) listPosts(w http.ResponseWriter, r *http.Request) {
 		}
 		where += fmt.Sprintf(` AND (p.%s->>'title' ILIKE $%d OR p.%s->>'subtitle' ILIKE $%d)`, field, len(args), field, len(args))
 	}
+	if tag := q.Get("tag"); tag != "" {
+		if !domain.ValidTag(tag) {
+			writeError(w, 400, "Unknown tag", "validation")
+			return
+		}
+		args = append(args, tag)
+		field := "published_summary"
+		if !public {
+			field = "draft_summary"
+		}
+		where += fmt.Sprintf(` AND p.%s->'tags' ? $%d`, field, len(args))
+	}
 	if q.Get("sort") == "popular" && public {
 		sort = `(SELECT count(*) FROM likes l WHERE l.post_id=p.id) DESC,p.published_at DESC,p.id`
 	}
@@ -361,7 +329,7 @@ func (s *Server) author(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, e)
 		return
 	}
-	rows, e := s.DB.Query(r.Context(), publicSummarySelect+`WHERE p.author_id=$1 AND p.published IS NOT NULL AND p.published_summary->>'visibility'='public' ORDER BY p.published_at DESC LIMIT 100`, u.ID)
+	rows, e := s.DB.Query(r.Context(), publicSummarySelect+`WHERE p.author_id=$1 AND p.published IS NOT NULL AND p.published_summary->>'visibility'='public' ORDER BY p.published_at DESC,p.id LIMIT $2 OFFSET $3`, u.ID, integer(r.URL.Query().Get("limit"), 20, 1, 50), integer(r.URL.Query().Get("offset"), 0, 0, 10000))
 	if e != nil {
 		writeInternalError(w, e)
 		return
@@ -419,7 +387,7 @@ func (s *Server) revisions(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, e)
 		return
 	}
-	rows, e := s.DB.Query(r.Context(), `SELECT id,snapshot->>'title',created_at FROM revisions WHERE post_id=$1 ORDER BY id DESC LIMIT 100`, id)
+	rows, e := s.DB.Query(r.Context(), `SELECT r.id,n.number,r.snapshot->>'title',r.created_at FROM (SELECT id,row_number() OVER(ORDER BY id) number FROM revisions WHERE post_id=$1) n JOIN revisions r ON r.id=n.id ORDER BY r.id DESC LIMIT 100`, id)
 	if e != nil {
 		writeInternalError(w, e)
 		return
@@ -428,7 +396,7 @@ func (s *Server) revisions(w http.ResponseWriter, r *http.Request) {
 	out := []domain.RevisionSummary{}
 	for rows.Next() {
 		var v domain.RevisionSummary
-		if e = rows.Scan(&v.ID, &v.Title, &v.CreatedAt); e != nil {
+		if e = rows.Scan(&v.ID, &v.Number, &v.Title, &v.CreatedAt); e != nil {
 			writeInternalError(w, e)
 			return
 		}
@@ -507,7 +475,7 @@ func (s *Server) commitPostAndRespond(w http.ResponseWriter, r *http.Request, tx
 func scanPostSummary(row scanner) (domain.PostSummary, error) {
 	var post domain.PostSummary
 	var summary []byte
-	e := row.Scan(&post.ID, &summary, &post.Revision, &post.CreatedAt, &post.UpdatedAt, &post.PublishedAt, &post.ReservedSlug, &post.IsPublished, &post.Author.ID, &post.Author.Username, &post.Author.Name, &post.Author.Bio, &post.Author.Avatar, &post.Likes, &post.Comments)
+	e := row.Scan(&post.ID, &summary, &post.Revision, &post.CreatedAt, &post.UpdatedAt, &post.PublishedAt, &post.ReservedSlug, &post.IsPublished, &post.Views, &post.ScheduledAt, &post.LiveVisibility, &post.ScheduleError, &post.Author.ID, &post.Author.Username, &post.Author.Name, &post.Author.Bio, &post.Author.Avatar, &post.Likes, &post.Comments)
 	if e != nil {
 		return post, e
 	}

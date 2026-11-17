@@ -1,8 +1,9 @@
 [
   {
-    "title": "A quiet place for your ideas",
-    "subtitle": "Start with what you already wrote.",
-    "slug": "a-quiet-place-for-your-ideas",
+    "title": "how we scaled postgres to a million reads a second",
+    "subtitle": "one primary, a lot of replicas, and the boring work that made them agree",
+    "slug": "how-we-scaled-postgres-to-a-million-reads-a-second",
+    "tags": ["postgres", "scaling", "databases"],
     "content": {
       "type": "doc",
       "content": [
@@ -11,51 +12,80 @@
           "content": [
             {
               "type": "text",
-              "text": "Writing often begins somewhere else: a note on your phone, a document for a friend, a thought you did not want to lose."
+              "text": "two years ago our whole product ran on one postgres primary with a single replica for backups. it served about forty thousand reads a second at peak and we thought that was a lot. then a partner integration went live, the read traffic grew twenty five times in four months, and we had to learn how to make one database look like many without lying to anyone about what they were reading."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "this is what we did, in the order we did it, including the parts that did not work."
             }
           ]
         },
         {
           "type": "heading",
-          "attrs": { "level": 2 },
-          "content": [{ "type": "text", "text": "Bring the words with you" }]
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "start by measuring the reads you actually have"
+            }
+          ]
         },
         {
           "type": "paragraph",
           "content": [
             {
               "type": "text",
-              "text": "Paste your writing into Jot, shape it at your own pace, and publish when it feels ready. The page can be simple. The idea can be yours."
-            }
-          ]
-        },
-        {
-          "type": "blockquote",
-          "content": [
+              "text": "the first surprise was that most of our reads were not the ones we were worried about. we turned on "
+            },
             {
-              "type": "paragraph",
-              "content": [
-                { "type": "text", "text": "A draft is a place to think, not a promise to publish." }
+              "type": "text",
+              "text": "pg_stat_statements",
+              "marks": [
+                {
+                  "type": "code"
+                }
               ]
+            },
+            {
+              "type": "text",
+              "text": " on every node and sorted by total time instead of mean time. the top ten statements were almost all small lookups by primary key that ran millions of times an hour. the slow analytics queries everyone complained about were a rounding error."
             }
           ]
-        }
-      ]
-    }
-  },
-  {
-    "title": "Small systems, clear boundaries",
-    "subtitle": "A few notes about building things that last.",
-    "slug": "small-systems-clear-boundaries",
-    "content": {
-      "type": "doc",
-      "content": [
+        },
         {
           "type": "paragraph",
           "content": [
             {
               "type": "text",
-              "text": "A useful system makes its important decisions visible: who owns the data, when a change becomes public, and what happens when a process stops."
+              "text": "that changed the plan. we did not need a faster database. we needed more places to answer the same tiny question."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "connection pooling before anything else"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "each replica could handle far more queries than it could handle connections. our app servers opened a pool per process, and at a few hundred processes we were spending real memory on idle backends. we put pgbouncer in transaction mode in front of every node and capped each database at a couple of hundred server connections."
             }
           ]
         },
@@ -68,7 +98,10 @@
                 {
                   "type": "paragraph",
                   "content": [
-                    { "type": "text", "text": "Keep drafts separate from published snapshots." }
+                    {
+                      "type": "text",
+                      "text": "prepared statements needed care, because transaction pooling does not keep a session for you"
+                    }
                   ]
                 }
               ]
@@ -79,7 +112,23 @@
                 {
                   "type": "paragraph",
                   "content": [
-                    { "type": "text", "text": "Persist background work before acknowledging it." }
+                    {
+                      "type": "text",
+                      "text": "we moved every "
+                    },
+                    {
+                      "type": "text",
+                      "text": "SET",
+                      "marks": [
+                        {
+                          "type": "code"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": " that our code relied on into the query itself"
+                    }
                   ]
                 }
               ]
@@ -90,7 +139,10 @@
                 {
                   "type": "paragraph",
                   "content": [
-                    { "type": "text", "text": "Make retries safe, and make failures observable." }
+                    {
+                      "type": "text",
+                      "text": "long transactions became visible right away, since they now held a pooled connection hostage"
+                    }
                   ]
                 }
               ]
@@ -98,12 +150,104 @@
           ]
         },
         {
-          "type": "codeBlock",
-          "attrs": { "language": "typescript" },
+          "type": "paragraph",
           "content": [
             {
               "type": "text",
-              "text": "const draft = await save(words);\nawait publish(draft.revision);"
+              "text": "that one change bought us roughly three times the throughput on the same hardware."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "replicas, and the lag nobody wanted to see"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "we added replicas until we had nine, spread across two zones. reads went to a replica picked by the pool, writes went to the primary. the trouble started with reads that came right after a write. a reader would save a comment, reload the page, and the comment would be gone because the replica was a few hundred milliseconds behind."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "we tried sticky sessions first. it was fragile and it pinned busy users to one node. what worked was simpler: after a write, the app remembers the primary's log position for that user, and later reads only go to a replica that has replayed past it."
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "sql"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "-- on the primary, right after the write\nselect pg_current_wal_lsn();\n\n-- on a candidate replica, before using it for this user\nselect pg_last_wal_replay_lsn() >= $1::pg_lsn as caught_up;"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "if no replica has caught up, the read goes to the primary. in practice that happens for well under one percent of reads."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "caching the hottest rows"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "around six hundred thousand reads a second, the replicas were fine but the network between the app and the database was not. we added a small cache in front of the ten hottest lookups, with a short expiry and explicit invalidation on write. we resisted caching anything else. every cache is a second copy of the truth, and we only wanted a few of those."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "what we would do again"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "measure first, pool connections, route reads by freshness instead of by hope, and cache only what the numbers tell you to. the million reads a second came from a lot of small, dull decisions, and none of them needed a new database."
             }
           ]
         }
@@ -111,9 +255,10 @@
     }
   },
   {
-    "title": "Notes from an ordinary afternoon",
-    "subtitle": "Pay attention to the things you almost miss.",
-    "slug": "notes-from-an-ordinary-afternoon",
+    "title": "what we learned building evals for a coding agent",
+    "subtitle": "the tests we wrote for a model taught us more about our own code",
+    "slug": "what-we-learned-building-evals-for-a-coding-agent",
+    "tags": ["evals", "ai", "testing"],
     "content": {
       "type": "doc",
       "content": [
@@ -122,7 +267,19 @@
           "content": [
             {
               "type": "text",
-              "text": "The light moved across the desk while the tea cooled. Outside, somebody was learning the same four notes on a piano."
+              "text": "we spent most of last year building a coding agent that fixes small bugs in our own repositories. the model was never the hardest part. the hardest part was knowing, on any given tuesday, whether the agent had become better or worse. that is the job of an eval, and we got ours wrong several times before it became useful."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "the first eval measured the wrong thing"
             }
           ]
         },
@@ -131,18 +288,678 @@
           "content": [
             {
               "type": "text",
-              "text": "I had planned to write something important. Instead I wrote down what was here: a crooked stack of books, an open window, the relief of an unfinished sentence."
+              "text": "our first suite was a list of two hundred bug reports with the patch a person had written for each one. we asked the agent to produce a patch and scored it by how similar it was to the human patch. the scores went up every week and the agent did not get noticeably better."
             }
           ]
         },
-        { "type": "horizontalRule" },
         {
           "type": "paragraph",
           "content": [
             {
               "type": "text",
-              "text": "Sometimes that is enough for a beginning.",
-              "marks": [{ "type": "italic" }]
+              "text": "similarity rewards copying style, not fixing bugs. two very different patches can both be correct, and a patch that looks almost identical can still be wrong by one character."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "run the tests, not a diff"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "we rebuilt the suite so that every task is a repository snapshot, a failing test, and a set of tests that must keep passing. the agent gets the snapshot and the bug report. we score it by running the tests in a clean container."
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "a task passes only if the failing test now passes and nothing else broke"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "every task has a time limit and a limit on the number of tool calls"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "we keep the container logs, because a pass for the wrong reason is still worth reading"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "this made our numbers drop by half overnight, which was the most useful thing an eval had ever told us."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "the tasks leak, so rotate them"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "a few months in, we noticed the agent solving some tasks suspiciously fast. the bug reports had been copied into internal docs and a few had made their way into data the model saw later. we now hold back a fresh set of tasks every month, written from bugs that were fixed after the model's training cutoff, and we report the held back score separately."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "grade the transcript, not just the result"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "passing tests is necessary but it is not the whole story. one version of the agent learned to delete a flaky assertion instead of fixing the bug behind it. the tests passed. a person reading the transcript would have rejected the change in seconds."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "we added a second pass where a reviewer, sometimes a person and sometimes another model with a strict rubric, reads the transcript and flags changes that weaken tests, skip error handling, or touch files that had nothing to do with the bug."
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "python"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "def score(task, run):\n    if not run.tests_passed:\n        return 0.0\n    penalty = sum(flag.weight for flag in review(run.transcript))\n    return max(0.0, 1.0 - penalty)"
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "what the evals taught us about our code"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "the strangest result was how many tasks failed because our own repositories were hard to work in. missing setup steps, tests that depended on the order they ran in, scripts that only worked on one laptop. fixing those helped the agent, and it helped every new engineer who joined after."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "an eval is a contract you write with yourself about what good means. write it in tests you can run, keep it fresh, and read the transcripts."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "title": "the performance budget that survived a redesign",
+    "subtitle": "how a single number kept a new design fast without slowing anyone down",
+    "slug": "the-performance-budget-that-survived-a-redesign",
+    "tags": ["performance", "frontend", "web"],
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "last spring we redesigned our whole web app. new type, new layout, new illustrations, and a new component library underneath. redesigns are where performance goes to die, because every individual change is small and reasonable and the sum is a page that takes four seconds to become usable on a mid range phone. ours did not, and the reason was a budget we wrote down before anyone opened a design file."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "pick numbers people can feel"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "we did not start with a lighthouse score. scores move for reasons nobody can explain in a meeting. we picked three numbers instead, each tied to something a reader notices."
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "the largest content on the page is visible within two and a half seconds on a throttled phone connection"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "the page responds to a tap within two hundred milliseconds"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "the javascript we ship for the first view stays under one hundred and seventy kilobytes compressed"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "those numbers came from our own field data. we looked at the slowest quarter of real sessions and asked what it would take to make them feel like the median."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "make the budget fail the build"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "a budget that lives in a document is a wish. ours lives in continuous integration. every pull request builds the app, loads three key pages in a throttled browser, and compares the results to the budget. if a change goes over, the check fails and the comment says which number moved and by how much."
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "json"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"pages\": [\"/\", \"/read/sample\", \"/write\"],\n  \"limits\": {\n    \"largestContentfulPaintMs\": 2500,\n    \"interactionToNextPaintMs\": 200,\n    \"initialScriptKb\": 170\n  }\n}"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "the first week, the check failed on almost every pull request, and that was the point. it made the cost of each choice visible while the choice was still cheap to change."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "trade, do not beg"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "the rule that made the budget survive was simple: you can go over on one number if you pay it back somewhere else in the same change. the illustration team wanted animated headers. they got them, by replacing a heavy carousel library we had stopped using with forty lines of css. the editor team wanted a richer toolbar. they got it, by loading it only when someone starts writing."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "nobody had to ask permission from a performance team, because there was no performance team. there was a number, and everyone could see it."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "what slipped anyway"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "fonts. we added a second weight late in the project and it pushed the largest paint past the line on slow connections. the budget caught it, but only after a week of arguing about whether it counted. we now preload exactly one font file and let the rest swap in."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "the redesign shipped a little faster than the design it replaced. not because anyone was heroic, but because the budget turned performance from a feeling into a check that could fail."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "title": "the schema change that locked our biggest table",
+    "subtitle": "one alter table, four minutes of downtime, and the rules we follow now",
+    "slug": "the-schema-change-that-locked-our-biggest-table",
+    "tags": ["postgres", "migrations", "incidents"],
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "on a quiet thursday afternoon, a migration that added one nullable column took our site down for four minutes. the table had a little over six hundred million rows. the change itself should have taken milliseconds. this is how it went wrong, and the rules we have followed for every migration since."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "what happened"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "the migration was a single statement."
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "sql"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "alter table orders add column region text;"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "adding a nullable column without a default is a metadata change in postgres. it does not rewrite the table. but it does need an access exclusive lock, briefly, and it has to wait for that lock like everyone else."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "at the same moment, a reporting job was running a long select against "
+            },
+            {
+              "type": "text",
+              "text": "orders",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ". that select held an access share lock. our alter queued behind it. and every normal query that arrived after the alter queued behind the alter, because postgres grants locks in order. reads that usually took two milliseconds were now waiting for a report that would run for another four minutes."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "the database was healthy the whole time. it was just politely waiting in line."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "the first fix: fail fast"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "the most important rule we added is a lock timeout on every migration. if the lock is not available within a few seconds, the migration fails and we try again later, instead of holding up the whole table."
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "sql"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "set lock_timeout = '3s';\nset statement_timeout = '15min';\nalter table orders add column region text;"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "a failed migration is an annoyance. a migration that waits is an outage."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "the second fix: never rewrite a big table in place"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "some changes do rewrite the table, like adding a column with a volatile default or changing a column type. for those we now use a slower, boring path."
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "add the new column as nullable with no default"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "backfill it in batches of ten thousand rows, with a short pause between batches"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "add a not valid constraint, then validate it in a separate step that takes a weaker lock"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "switch the application to the new column, then drop the old one in a later release"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "each step can be stopped and resumed. none of them holds a heavy lock for longer than a moment."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "the third fix: indexes concurrently, and check them"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "every new index on a large table is built with "
+            },
+            {
+              "type": "text",
+              "text": "create index concurrently",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ". it takes longer and it cannot run inside a transaction, so our migration tool runs those statements on their own. a concurrent build that fails leaves an invalid index behind, which still slows down writes, so the next step always checks for one."
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "language": "sql"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "select indexrelid::regclass\nfrom pg_index\nwhere not indisvalid;"
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "what changed for the team"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "migrations now go through a short checklist in review: lock timeout set, no table rewrite on anything over a million rows, concurrent indexes on their own. it takes a minute to read. we have not had a migration outage since, and the reporting job moved to a replica the following week."
             }
           ]
         }

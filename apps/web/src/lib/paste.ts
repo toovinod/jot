@@ -82,6 +82,15 @@ export function looksLikeMarkdown(text: string) {
   return /(^|\n)(#{1,6} |```|[-*+] |\d+\. |> |\|.+\|)|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\)/.test(text);
 }
 
+/** Code editors such as VS Code copy styled spans rather than structure. When the HTML has no
+ * structure of its own and the plain text reads as Markdown, the text is what was meant. */
+export function pasteAsMarkdown(html: string, text: string) {
+  if (!text || !looksLikeMarkdown(text)) return false;
+  if (!html) return true;
+  const document = new DOMParser().parseFromString(html, "text/html");
+  return !document.querySelector("h1,h2,h3,h4,h5,h6,ul,ol,li,table,a,pre,blockquote,img");
+}
+
 export type ClipboardPayload = { html: string; text: string; attachmentCount: number };
 /** Keep clipboard text and remote images. Attachments may duplicate refs whose pairing is unknown. */
 export function insertClipboardContent(

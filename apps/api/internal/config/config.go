@@ -27,6 +27,11 @@ type Config struct {
 	S3SecretKey       string
 	S3PublicURL       string
 	TrustedProxyCIDRs string
+	// CustomDomainTarget is the CNAME host authors point custom domains at; empty disables custom domains.
+	CustomDomainTarget string
+	// ViewHashSecret keys the anonymous view-dedupe HMAC; share it across replicas and restarts. Empty uses a
+	// random per-process secret.
+	ViewHashSecret string
 }
 
 func FromEnv() Config {
@@ -49,21 +54,23 @@ func FromEnv() Config {
 		region = "auto"
 	}
 	return Config{
-		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		Addr:              env("API_ADDR", ":8080"),
-		Origin:            strings.TrimRight(env("APP_ORIGIN", "http://localhost:3000"), "/"),
-		TrustedProxyCIDRs: os.Getenv("TRUSTED_PROXY_CIDRS"),
-		UploadDir:         env("UPLOAD_DIR", "./uploads"),
-		OpenAIKey:         os.Getenv("OPENAI_API_KEY"),
-		OpenAIModel:       env("OPENAI_MODEL", DefaultOpenAIModel),
-		ResendKey:         os.Getenv("RESEND_API_KEY"),
-		EmailFrom:         os.Getenv("EMAIL_FROM"),
-		S3Bucket:          bucket,
-		S3Endpoint:        endpoint,
-		S3Region:          region,
-		S3AccessKey:       accessKey,
-		S3SecretKey:       secretKey,
-		S3PublicURL:       strings.TrimRight(publicURL, "/"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		Addr:               env("API_ADDR", ":8080"),
+		Origin:             strings.TrimRight(env("APP_ORIGIN", "http://localhost:3000"), "/"),
+		TrustedProxyCIDRs:  os.Getenv("TRUSTED_PROXY_CIDRS"),
+		UploadDir:          env("UPLOAD_DIR", "./uploads"),
+		OpenAIKey:          os.Getenv("OPENAI_API_KEY"),
+		OpenAIModel:        env("OPENAI_MODEL", DefaultOpenAIModel),
+		ResendKey:          os.Getenv("RESEND_API_KEY"),
+		EmailFrom:          os.Getenv("EMAIL_FROM"),
+		S3Bucket:           bucket,
+		S3Endpoint:         endpoint,
+		S3Region:           region,
+		S3AccessKey:        accessKey,
+		S3SecretKey:        secretKey,
+		S3PublicURL:        strings.TrimRight(publicURL, "/"),
+		CustomDomainTarget: strings.TrimSuffix(strings.ToLower(strings.TrimSpace(os.Getenv("CUSTOM_DOMAIN_TARGET"))), "."),
+		ViewHashSecret:     os.Getenv("VIEW_HASH_SECRET"),
 	}
 }
 func env(k, d string) string {
@@ -98,6 +105,9 @@ func Validate(c Config) error {
 	}
 	if _, e := ParseTrustedProxies(c.TrustedProxyCIDRs); e != nil {
 		return e
+	}
+	if c.ViewHashSecret != "" && len(c.ViewHashSecret) < 32 {
+		return errors.New("VIEW_HASH_SECRET must be empty or at least 32 characters")
 	}
 	u, valid := parseHTTPBase(c.Origin)
 	if !valid || u.Path != "" {

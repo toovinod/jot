@@ -139,7 +139,7 @@ func TestEmailRetriesReplaySnapshotAcrossConfigurationAndTemplateChanges(t *test
 	}
 	worker.Config.EmailFrom = "changed@example.com"
 	worker.Config.Origin = "https://changed.example.com"
-	message := worker.emailClient().SubscriptionMessage(retry.Kind, retry.Payload)
+	message := worker.emailClient().SubscriptionMessage(retry.Kind, retry.Payload, nil)
 	message.HTML = "A new template introduced by a deployment"
 	if err = worker.deliverEmailSnapshot(ctx, retry, message); err != nil {
 		t.Fatal(err)

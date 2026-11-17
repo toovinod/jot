@@ -18,6 +18,9 @@ services:
     environment:
       APP_ENV: production
       APP_ORIGIN: https://${SITE_ADDRESS:?Set SITE_ADDRESS to your public DNS hostname}
+  web:
+    environment:
+      APP_ORIGIN: https://${SITE_ADDRESS:?Set SITE_ADDRESS to your public DNS hostname}
   ingress:
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS to your public DNS hostname}

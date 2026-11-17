@@ -8,6 +8,7 @@ const draft = (title: string): Snapshot => ({
   slug: "draft",
   cover: "",
   visibility: "public",
+  tags: [],
   appearance: defaultAppearance,
   content: { type: "doc", content: [{ type: "paragraph" }] },
 });

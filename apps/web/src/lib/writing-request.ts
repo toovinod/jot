@@ -6,6 +6,10 @@ export type SavedWritingRequest = {
   createdAt: number;
 };
 const lifetime = 24 * 60 * 60 * 1000;
+/** The most draft text one writing request may send, in UTF-8 bytes, matching the API. */
+export const writingRequestLimit = 120_000;
+// JSON escaping can grow each byte to at most six characters ("\u0000").
+const maxRecordLength = writingRequestLimit * 6 + 4096;
 /** Keep request references in this tab only; the authorized API remains the source of the result. */
 export class WritingRequestStore {
   private prefix: string;
@@ -21,14 +25,14 @@ export class WritingRequestStore {
   read(now = Date.now()): SavedWritingRequest | "expired" | null {
     try {
       const raw = this.storage.getItem(this.key);
-      if (!raw || raw.length > 65000) return null;
+      if (!raw || raw.length > maxRecordLength) return null;
       const record = JSON.parse(raw);
       if (
         typeof record.id !== "string" ||
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(record.id) ||
         !["grammar", "structure", "review"].includes(record.mode) ||
         typeof record.source !== "string" ||
-        new TextEncoder().encode(record.source).length > 30000 ||
+        new TextEncoder().encode(record.source).length > writingRequestLimit ||
         !Number.isFinite(record.createdAt)
       )
         return null;
@@ -64,7 +68,10 @@ export class WritingRequestStore {
       }
       if (kept >= 16) return false;
       const encoded = JSON.stringify(record);
-      if (encoded.length > 65000 || new TextEncoder().encode(record.source).length > 30000)
+      if (
+        encoded.length > maxRecordLength ||
+        new TextEncoder().encode(record.source).length > writingRequestLimit
+      )
         return false;
       this.storage.setItem(this.key, encoded);
       return true;

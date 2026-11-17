@@ -16,6 +16,20 @@ type Worker struct {
 	Client *http.Client
 }
 
+// AI jobs can write a whole post, which takes the provider minutes, so they get a longer deadline
+// (and a matching lease in Claim) than email and the other short jobs.
+const (
+	jobTimeout   = 55 * time.Second
+	aiJobTimeout = 4*time.Minute + 30*time.Second
+)
+
+func timeoutFor(kind string) time.Duration {
+	if kind == "ai" {
+		return aiJobTimeout
+	}
+	return jobTimeout
+}
+
 func New(db *pgxpool.Pool, c *config.Config) *Worker {
 	return &Worker{DB: db, Config: c, Client: &http.Client{Timeout: 45 * time.Second}}
 }
@@ -23,8 +37,17 @@ func New(db *pgxpool.Pool, c *config.Config) *Worker {
 func (s *Worker) Run(ctx context.Context) error {
 	timer := time.NewTicker(time.Second)
 	defer timer.Stop()
-	lastCleanup := time.Time{}
+	lastCleanup, lastSchedule := time.Time{}, time.Time{}
 	for {
+		if time.Since(lastSchedule) >= time.Minute {
+			publish, cancel := context.WithTimeout(ctx, 30*time.Second)
+			e := s.PublishDue(publish)
+			cancel()
+			if e != nil {
+				slog.Warn("Scheduled publication pass failed", "error", e)
+			}
+			lastSchedule = time.Now()
+		}
 		if time.Since(lastCleanup) > 10*time.Minute {
 			cleanup, cancel := context.WithTimeout(ctx, 10*time.Second)
 			e := s.CleanupExpiredData(cleanup)
@@ -57,7 +80,7 @@ func (s *Worker) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		jobCtx, cancel := context.WithTimeout(ctx, 55*time.Second)
+		jobCtx, cancel := context.WithTimeout(ctx, timeoutFor(j.Kind))
 		result, workErr := s.Execute(jobCtx, j)
 		cancel()
 		finishCtx, finishCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -83,7 +106,7 @@ func (s *Worker) Execute(ctx context.Context, j *Job) (string, error) {
 		return "", s.deliverAccountEmail(ctx, j)
 	}
 	if j.Kind == "newsletter" || j.Kind == "confirmation" {
-		return "", s.deliverSubscriptionEmail(ctx, j)
+		return s.deliverSubscriptionEmail(ctx, j)
 	}
 	return "", permanentError{"Unknown job type"}
 }

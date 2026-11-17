@@ -127,3 +127,13 @@ func TestFinishPersistsProviderDelayAndHonorsRetryDeadline(t *testing.T) {
 		})
 	}
 }
+
+func TestAIJobsOutlastALongAnswer(t *testing.T) {
+	if timeoutFor("ai") < 4*time.Minute || timeoutFor("newsletter") != jobTimeout {
+		t.Fatalf("ai timeout %s, newsletter %s", timeoutFor("ai"), timeoutFor("newsletter"))
+	}
+	// The lease must outlast the job, or another worker could claim it mid-answer.
+	if timeoutFor("ai") >= 5*time.Minute {
+		t.Fatal("AI job deadline must end before its 5 minute lease")
+	}
+}

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { PostSummary } from "@jot/contracts";
 import { greeting, loadAllMine, summarize } from "../src/lib/dashboard-stats";
 
-function post(id: number, isPublished: boolean, likes = 0): PostSummary {
+function post(id: number, isPublished: boolean, likes = 0, views = 0): PostSummary {
   return {
     id: String(id),
     author: { id: "a", username: "maya", name: "Maya", bio: "", avatar: "" },
@@ -15,6 +15,8 @@ function post(id: number, isPublished: boolean, likes = 0): PostSummary {
     updatedAt: "2026-01-01T00:00:00Z",
     revision: 1,
     likes,
+    views,
+    tags: [],
     comments: 0,
     excerpt: "",
     readingMinutes: 1,
@@ -22,11 +24,12 @@ function post(id: number, isPublished: boolean, likes = 0): PostSummary {
   };
 }
 
-test("summarize counts live pages, drafts and likes", () => {
-  expect(summarize([post(1, true, 3), post(2, true, 2), post(3, false)])).toEqual({
+test("summarize counts live pages, drafts, likes and reads", () => {
+  expect(summarize([post(1, true, 3, 40), post(2, true, 2, 2), post(3, false)])).toEqual({
     live: 2,
     drafts: 1,
     likes: 5,
+    reads: 42,
   });
 });
 

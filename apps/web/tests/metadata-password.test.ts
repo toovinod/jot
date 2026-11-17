@@ -12,6 +12,7 @@ test("validates password bytes without truncating Unicode or blocking existing s
 });
 test("unlisted publication metadata discourages indexing while public stories remain indexable", () => {
   const post = {
+    author: { id: "a", username: "maya", name: "Maya", bio: "", avatar: "" },
     title: "Private draft title",
     subtitle: "Draft",
     slug: "story",
@@ -29,8 +30,11 @@ test("unlisted publication metadata discourages indexing while public stories re
       appearance: defaultAppearance,
     },
   } as Post;
-  expect(publishedPostMetadata(post).robots).toEqual({ index: false, follow: false });
-  expect(publishedPostMetadata(post).title).toBe("Live title");
+  expect(publishedPostMetadata(post, "https://jot.example").robots).toEqual({
+    index: false,
+    follow: false,
+  });
+  expect(publishedPostMetadata(post, "https://jot.example").title).toBe("Live title");
   post.published!.visibility = "public";
-  expect(publishedPostMetadata(post).robots).toBeUndefined();
+  expect(publishedPostMetadata(post, "https://jot.example").robots).toBeUndefined();
 });

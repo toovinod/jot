@@ -22,12 +22,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/chi/v5"
 	"github.com/jot-project/jot/apps/api/internal/security"
+	_ "golang.org/x/image/webp"
 )
 
 const maxImageSize = 10 << 20
 const maxConcurrentUploads = 4
 
-var mediaPattern = regexp.MustCompile(`^[a-f0-9]{64}\.(png|jpg|gif)$`)
+var mediaTypes = map[string]string{"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}
+var mediaPattern = regexp.MustCompile(`^[a-f0-9]{64}\.(png|jpg|gif|webp)$`)
 
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	u, ok := requireUser(w, r)
@@ -66,16 +68,16 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg, format, e := image.DecodeConfig(bytes.NewReader(data))
 	if e != nil || cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > 12000 || cfg.Height > 12000 || int64(cfg.Width)*int64(cfg.Height) > 40000000 {
-		writeError(w, 400, "Supported images are PNG, JPEG and GIF, up to 40 megapixels", "invalid_upload")
+		writeError(w, 400, "Supported images are PNG, JPEG, GIF and WebP, up to 40 megapixels", "invalid_upload")
 		return
 	}
-	ext := map[string]string{"jpeg": "jpg", "png": "png", "gif": "gif"}[format]
+	ext := map[string]string{"jpeg": "jpg", "png": "png", "gif": "gif", "webp": "webp"}[format]
 	if ext == "" {
 		writeError(w, 400, "Unsupported image format", "invalid_upload")
 		return
 	}
 	key := security.RandomToken() + "." + ext
-	contentType := map[string]string{"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif"}[ext]
+	contentType := mediaTypes[ext]
 	assetURL := "/media/" + key
 	if s.Config.S3Bucket != "" {
 		assetURL = s.Config.S3PublicURL + "/" + key
@@ -126,11 +128,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 503, "Image storage is not configured", "storage_unavailable")
 			return
 		}
-		options := s3.Options{Region: s.Config.S3Region, Credentials: credentials.NewStaticCredentialsProvider(s.Config.S3AccessKey, s.Config.S3SecretKey, ""), UsePathStyle: true, BaseEndpoint: optionalString(s.Config.S3Endpoint)}
-		if s.storageHTTPClient != nil {
-			options.HTTPClient = s.storageHTTPClient
-		}
-		client := s3.New(options)
+		client := s.storageClient()
 		// A failed response can follow a committed object; keep its quota reservation.
 		retainReservation = true
 		_, e = client.PutObject(r.Context(), &s3.PutObjectInput{Bucket: aws.String(s.Config.S3Bucket), Key: aws.String(key), Body: bytes.NewReader(data), ContentType: aws.String(contentType), CacheControl: aws.String("public,max-age=31536000,immutable")})
@@ -154,12 +152,35 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if e == nil || retainReservation {
+		// Account deletion removes the objects of the rows it deletes. If it committed after the reservation but
+		// before the object was stored, the row is gone and nothing else would remove the object, so do it here.
+		// Checking after storing closes the gap: a deletion that commits later sees the row and removes the object.
+		check, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		var reserved bool
+		checkErr := s.DB.QueryRow(check, `SELECT EXISTS(SELECT 1 FROM media_assets WHERE key=$1)`, key).Scan(&reserved)
+		cancel()
+		if checkErr != nil {
+			slog.Error("Upload reservation check failed", "key", key, "error", checkErr)
+		} else if !reserved {
+			s.removeMedia([]string{key})
+			writeError(w, 409, "The account was deleted during the upload", "account_deleted")
+			return
+		}
+	}
 	if e != nil {
 		writeInternalError(w, e)
 		return
 	}
 	uploaded = true
 	writeJSON(w, 201, map[string]string{"url": assetURL})
+}
+func (s *Server) storageClient() *s3.Client {
+	options := s3.Options{Region: s.Config.S3Region, Credentials: credentials.NewStaticCredentialsProvider(s.Config.S3AccessKey, s.Config.S3SecretKey, ""), UsePathStyle: true, BaseEndpoint: optionalString(s.Config.S3Endpoint)}
+	if s.storageHTTPClient != nil {
+		options.HTTPClient = s.storageHTTPClient
+	}
+	return s3.New(options)
 }
 func optionalString(v string) *string {
 	if v == "" {
@@ -185,7 +206,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ext := strings.TrimPrefix(filepath.Ext(key), ".")
-	w.Header().Set("Content-Type", map[string]string{"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif"}[ext])
+	w.Header().Set("Content-Type", mediaTypes[ext])
 	w.Header().Set("Cache-Control", "public,max-age=31536000,immutable")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, key))
 	http.ServeContent(w, r, key, st.ModTime(), f)

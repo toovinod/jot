@@ -14,6 +14,7 @@ function article(appearance: Partial<Appearance>) {
     content: { type: "doc", content: [] },
     appearance: { ...defaultAppearance, ...appearance },
     visibility: "public",
+    tags: [],
   };
   return renderToStaticMarkup(<Article snapshot={snapshot} author={author} />);
 }

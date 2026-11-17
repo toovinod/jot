@@ -845,7 +845,7 @@ func TestLargePostListsStayBoundedAndPublicSummariesIgnoreDrafts(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, path := range []string{"/api/posts?limit=50", "/api/authors/" + u.Username, "/api/posts?scope=mine&limit=50", "/api/posts?scope=bookmarks&limit=50"} {
+	for _, path := range []string{"/api/posts?limit=50", "/api/authors/" + u.Username + "?limit=50", "/api/posts?scope=mine&limit=50", "/api/posts?scope=bookmarks&limit=50"} {
 		w := request(t, s, "GET", path, nil, c)
 		var result struct {
 			Posts []domain.PostSummary `json:"posts"`
@@ -972,5 +972,55 @@ func TestRevisionListReturnsOnlyBoundedMetadata(t *testing.T) {
 	decodeResponse(t, request(t, s, "POST", "/api/posts/"+p.ID+"/restore", map[string]any{"revision": p.Revision, "versionId": result.Revisions[0].ID}, c), 200, &p)
 	if p.Title != "Revision title" || len(p.Content.Content[0].Content[0].Text) != 500000 {
 		t.Fatal("metadata list broke full-snapshot restoration")
+	}
+}
+
+func TestUploadRemovesObjectWhenAccountIsDeletedDuringStorage(t *testing.T) {
+	s := testServer(t)
+	u, c := account(t, s)
+	s.Config.S3Bucket = "images"
+	s.Config.S3Endpoint = "https://storage.example.com"
+	s.Config.S3Region = "auto"
+	s.Config.S3AccessKey = "key"
+	s.Config.S3SecretKey = "secret"
+	s.Config.S3PublicURL = "https://media.example.com"
+	var imageData bytes.Buffer
+	if e := png.Encode(&imageData, image.NewRGBA(image.Rect(0, 0, 2, 2))); e != nil {
+		t.Fatal(e)
+	}
+	var multipartBody bytes.Buffer
+	form := multipart.NewWriter(&multipartBody)
+	part, e := form.CreateFormFile("file", "image.png")
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, _ = part.Write(imageData.Bytes())
+	_ = form.Close()
+	var stored, deleted string
+	s.storageHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(r.Body)
+		if r.Method == "PUT" {
+			// Account deletion commits after the reservation and finds no stored object yet.
+			stored = strings.TrimPrefix(r.URL.Path, "/images/")
+			if _, e := s.DB.Exec(r.Context(), `DELETE FROM users WHERE id=$1`, u.ID); e != nil {
+				t.Error(e)
+			}
+			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+		}
+		deleted = string(body)
+		reply := `<?xml version="1.0" encoding="UTF-8"?><DeleteResult></DeleteResult>`
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/xml"}}, Body: io.NopCloser(strings.NewReader(reply)), Request: r}, nil
+	})}
+	r := httptest.NewRequest("POST", "/api/uploads", &multipartBody)
+	r.Header.Set("Origin", s.Config.Origin)
+	r.Header.Set("Content-Type", form.FormDataContentType())
+	r.AddCookie(c)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	if stored == "" || w.Code == 201 {
+		t.Fatalf("upload after account deletion returned %d for %q", w.Code, stored)
+	}
+	if !strings.Contains(deleted, stored) {
+		t.Fatalf("object %q stored after account deletion was not removed: %q", stored, deleted)
 	}
 }

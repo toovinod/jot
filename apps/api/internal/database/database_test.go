@@ -120,7 +120,7 @@ func TestMigrateUpgradesVersionOneAndIsIdempotent(t *testing.T) {
 		t.Fatal(e)
 	}
 	var versions int
-	if e := db.QueryRow(context.Background(), `SELECT count(*) FROM schema_migrations`).Scan(&versions); e != nil || versions != 3 {
+	if e := db.QueryRow(context.Background(), `SELECT count(*) FROM schema_migrations`).Scan(&versions); e != nil || versions != 6 {
 		t.Fatalf("migration history=%d error=%v", versions, e)
 	}
 	var raw []byte

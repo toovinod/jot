@@ -1,52 +1,50 @@
 "use client";
-import type { Icon } from "@phosphor-icons/react";
-import {
-  BracketsCurly,
-  ClipboardText,
-  ClockCounterClockwise,
-  EyeSlash,
-  Palette,
-  Sparkle,
-} from "@phosphor-icons/react";
-import { cn } from "@/lib/utils";
-import { Reveal, SectionTitle, softItalic } from "./reveal";
+import { motion } from "motion/react";
+import { Critter, type CritterKind } from "@/components/world/critters";
+import { PixelArt } from "@/components/world/pixel";
+import { frameSky } from "@/components/world/pixel-sky";
+import { Reveal } from "./reveal";
 
-const features: { icon: Icon; tint: string; title: string; body: string }[] = [
+const features: { kind: CritterKind; title: string; body: string }[] = [
   {
-    icon: ClipboardText,
-    tint: "bg-sky-soft text-sky-deep",
-    title: "paste from anywhere.",
-    body: "Google Docs, Notion, Word, Apple Notes, a web page. the structure survives the trip.",
-  },
-  {
-    icon: BracketsCurly,
-    tint: "bg-[#dff5e3] text-grass-3",
+    kind: "book",
     title: "code that looks like code.",
-    body: "code blocks, tables, task lists and images sit right next to your words.",
+    body: "code blocks highlighted in common languages, with tables and task lists right next to your words.",
   },
   {
-    icon: Palette,
-    tint: "bg-[#fff1c7] text-[#b07d00]",
-    title: "make it yours.",
-    body: "pick a font, an accent and a reading width. drag the cover, title and author bio into the order you like.",
+    kind: "page",
+    title: "speaks markdown.",
+    body: "paste Markdown and it renders. import a .md file, export one back out, and drop PNG, JPEG, GIF or WebP images straight in.",
   },
   {
-    icon: EyeSlash,
-    tint: "bg-[#ffe4ec] text-rose",
-    title: "drafts stay drafts.",
-    body: "keep editing a live page. readers see the published version until you publish again.",
+    kind: "star",
+    title: "editions you can bring back.",
+    body: "every publish creates an edition. bring any of the latest 100 back into your draft without touching the live page.",
   },
   {
-    icon: ClockCounterClockwise,
-    tint: "bg-[#efe7ff] text-[#7c4dff]",
-    title: "every edition kept.",
-    body: "each publish is saved. bring an old one back into your draft without touching what's live.",
+    kind: "bookmark",
+    title: "autosave, with a recovery copy.",
+    body: "drafts save as you type. a copy in your browser helps recover unsaved changes, and two open tabs never silently overwrite each other.",
   },
   {
-    icon: Sparkle,
-    tint: "bg-[#ffe9dc] text-terra",
+    kind: "letter",
     title: "an editor that won't rewrite you.",
-    body: "optional AI checks grammar, flow and gaps in your argument. it suggests. you decide.",
+    body: "when your instance turns it on, AI suggests grammar fixes, structure and knowledge gaps. it never edits your text.",
+  },
+  {
+    kind: "plane",
+    title: "ready for feeds and sharing.",
+    body: "public pages go into RSS and the sitemap. add a subtitle and cover for richer link previews.",
+  },
+  {
+    kind: "heart",
+    title: "publish on your schedule.",
+    body: "pick a time and jot publishes it then, checking every minute, with an optional email to subscribers.",
+  },
+  {
+    kind: "page",
+    title: "your own domain.",
+    body: "on instances that offer it, serve your pages from a domain you own. add a TXT and a CNAME record, verify, and readers find you there.",
   },
 ];
 
@@ -54,30 +52,59 @@ export function Features() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-24 md:px-8 md:py-32">
       <Reveal>
-        <SectionTitle eyebrow="what you get">
-          everything a page needs. <em className={softItalic}>nothing it doesn&apos;t.</em>
-        </SectionTitle>
+        <div className="relative isolate overflow-hidden rounded-[28px] px-3 pb-40 pt-12 sm:px-8 md:rounded-[36px] md:px-14 md:pb-48 md:pt-16">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
+            <PixelArt {...frameSky} fit="cover" soft />
+            <Critter
+              kind="plane"
+              className="absolute bottom-24 left-[12%] size-12 -rotate-12 animate-[hop_3s_ease-in-out_infinite] motion-reduce:animate-none"
+            />
+            <Critter
+              kind="page"
+              blinkDelay={-2}
+              className="absolute bottom-14 right-[16%] size-14 animate-[hop_2.6s_ease-in-out_-1s_infinite] motion-reduce:animate-none"
+            />
+            <Critter
+              kind="heart"
+              blinkDelay={-1}
+              className="absolute bottom-10 left-[46%] hidden size-10 animate-[hop_3.4s_ease-in-out_-2s_infinite] motion-reduce:animate-none sm:block"
+            />
+          </div>
+          <div className="mx-auto max-w-5xl rounded-3xl bg-white p-6 shadow-[0_30px_60px_-30px_rgba(0,40,100,.5)] sm:p-10 md:p-12">
+            <h2 className="font-display text-4xl font-medium leading-[1.03] tracking-[-0.045em] md:text-5xl">
+              everything a page needs.
+            </h2>
+            <p className="mt-3 text-muted-foreground">
+              <span className="text-foreground">nothing it doesn&apos;t.</span> the details that
+              make a page hold up.
+            </p>
+            <ul className="mt-10 grid gap-x-12 gap-y-8 md:grid-cols-2">
+              {features.map((feature, i) => (
+                <motion.li
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.6 }}
+                  transition={{ duration: 0.45, delay: (i % 2) * 0.08 + Math.floor(i / 2) * 0.06 }}
+                  className="group flex gap-4"
+                >
+                  <Critter
+                    kind={feature.kind}
+                    blinkDelay={-i * 0.7}
+                    className="mt-0.5 size-9 transition-transform duration-300 ease-[cubic-bezier(.3,.7,.4,1.6)] group-hover:-translate-y-1 group-hover:-rotate-12 group-hover:scale-110 motion-reduce:transform-none"
+                  />
+                  <div>
+                    <h3 className="font-display text-lg font-semibold tracking-[-0.02em]">
+                      {feature.title}
+                    </h3>
+                    <p className="mt-1 leading-relaxed text-muted-foreground">{feature.body}</p>
+                  </div>
+                </motion.li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </Reveal>
-      <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {features.map((feature, i) => (
-          <Reveal key={feature.title} delay={(i % 3) * 0.08}>
-            <article className="group h-full rounded-3xl border border-border bg-white p-6 shadow-[0_4px_0_var(--border)] transition-transform duration-200 hover:-translate-y-1 hover:-rotate-[0.4deg] motion-reduce:transform-none">
-              <span
-                className={cn(
-                  "grid size-12 place-items-center rounded-2xl transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-110 motion-reduce:transform-none",
-                  feature.tint,
-                )}
-              >
-                <feature.icon weight="duotone" className="size-6" />
-              </span>
-              <h3 className="mt-5 font-display text-xl font-bold tracking-[-0.03em]">
-                {feature.title}
-              </h3>
-              <p className="mt-2 leading-relaxed text-muted-foreground">{feature.body}</p>
-            </article>
-          </Reveal>
-        ))}
-      </div>
     </section>
   );
 }

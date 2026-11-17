@@ -4,8 +4,6 @@ import { Demo } from "@/components/landing/demo";
 import { Features } from "@/components/landing/features";
 import { HowItWorks } from "@/components/landing/how-it-works";
 import { Readers } from "@/components/landing/readers";
-import { DiscoverPreview } from "@/components/landing/discover-preview";
-import { SelfHost } from "@/components/landing/self-host";
 import { Closing } from "@/components/landing/closing";
 
 export default function Home() {
@@ -15,14 +13,12 @@ export default function Home() {
       <main className="overflow-x-clip">
         <Hero />
         <Demo />
-        <Features />
         <HowItWorks />
+        <Features />
         <Readers />
-        <DiscoverPreview />
-        <SelfHost />
         <Closing />
       </main>
-      <Footer samples />
+      <Footer />
     </>
   );
 }

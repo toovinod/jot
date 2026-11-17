@@ -124,6 +124,36 @@ describe("structured document rendering", () => {
     for (let i = 0; i < 100; i++) doc = { type: "unknown", content: [doc] };
     expect(renderToStaticMarkup(<RichDocument document={doc} />)).not.toContain("too deep");
   });
+  test("renders every node of a long valid document and bounds the whole tree at the API's limit", () => {
+    const paragraphs = (count: number): DocNode => ({
+      type: "doc",
+      content: Array.from({ length: count }, (_, i) => ({
+        type: "paragraph",
+        content: [{ type: "text", text: `line-${i}.` }],
+      })),
+    });
+    // 1 doc + 24,999 paragraphs + 24,999 texts: 49,999 nodes, inside the API's 50,000.
+    const valid = renderToStaticMarkup(<RichDocument document={paragraphs(24_999)} />);
+    expect(valid.includes("line-10000.")).toBe(true);
+    expect(valid.includes("line-24998.")).toBe(true);
+    // One paragraph holding many text runs is not cut at a per-parent count either.
+    const runs: DocNode = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: Array.from({ length: 12_000 }, (_, i) => ({ type: "text", text: `run-${i}.` })),
+        },
+      ],
+    };
+    expect(renderToStaticMarkup(<RichDocument document={runs} />).includes("run-11999.")).toBe(
+      true,
+    );
+    // Past the limit the rest is left out rather than rendered without end.
+    const over = renderToStaticMarkup(<RichDocument document={paragraphs(30_000)} />);
+    expect(over.includes("line-24000.")).toBe(true);
+    expect(over.includes("line-29999.")).toBe(false);
+  });
 });
 describe("clipboard and URL boundaries", () => {
   test("accepts supported navigation and image protocols only", () => {

@@ -1,0 +1,19 @@
+[
+  {
+    "slug": "how-we-scaled-postgres-to-a-million-reads-a-second",
+    "body": "the part about routing reads by log position is exactly what we needed. did you ever see a replica stay behind long enough that the primary took most of the reads?",
+    "reply": "once, during a large backfill. the primary handled it fine, but we now pause backfills when replica lag passes a few seconds."
+  },
+  {
+    "slug": "what-we-learned-building-evals-for-a-coding-agent",
+    "body": "grading the transcript and not just the tests is a good rule. we had an agent that kept marking flaky tests as skipped and calling it a fix."
+  },
+  {
+    "slug": "the-performance-budget-that-survived-a-redesign",
+    "body": "trade, do not beg is going on a sticky note. how did you pick the script size limit?"
+  },
+  {
+    "slug": "the-schema-change-that-locked-our-biggest-table",
+    "body": "we hit the same lock queue last year. setting lock_timeout on every migration was the single best change we made."
+  }
+]

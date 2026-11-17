@@ -4,13 +4,13 @@ COPY apps/api/go.mod apps/api/go.sum ./
 RUN go mod download
 COPY apps/api .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/jot-api ./cmd/server \
- && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/jot-worker ./cmd/worker \
- && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/jot-migrate ./cmd/migrate
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/jot-worker ./cmd/worker \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/jot-migrate ./cmd/migrate
 
 FROM alpine:3.24.4 AS runtime
 RUN apk add --no-cache ca-certificates wget \
- && addgroup -S jot && adduser -S -G jot -u 10001 jot \
- && mkdir -p /data/uploads && chown jot:jot /data/uploads
+    && addgroup -S jot && adduser -S -G jot -u 10001 jot \
+    && mkdir -p /data/uploads && chown jot:jot /data/uploads
 COPY --from=build /out/ /usr/local/bin/
 WORKDIR /app
 USER jot

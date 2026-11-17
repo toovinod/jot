@@ -31,7 +31,7 @@ func (s *Worker) Claim(ctx context.Context) (*Job, error) {
 	j := Job{}
 	raw := []byte{}
 	lease := uuid.NewString()
-	e = tx.QueryRow(ctx, `WITH next AS(SELECT id FROM jobs WHERE ((status='pending' AND available_at<=now()) OR(status='running' AND lease_until<now())) AND attempts<5 AND (first_attempt_at IS NULL OR first_attempt_at>now()-interval '23 hours') ORDER BY available_at,created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs j SET status='running',attempts=attempts+1,first_attempt_at=COALESCE(first_attempt_at,now()),lease_until=now()+interval '2 minutes',lease_token=$1,updated_at=now() FROM next WHERE j.id=next.id RETURNING j.id,j.kind,COALESCE(j.user_id::text,''),j.payload,j.attempts,j.first_attempt_at,j.idempotency_key`, lease).Scan(&j.ID, &j.Kind, &j.UserID, &raw, &j.Attempts, &j.FirstAttempt, &j.IdempotencyKey)
+	e = tx.QueryRow(ctx, `WITH next AS(SELECT id FROM jobs WHERE ((status='pending' AND available_at<=now()) OR(status='running' AND lease_until<now())) AND attempts<5 AND (first_attempt_at IS NULL OR first_attempt_at>now()-interval '23 hours') ORDER BY available_at,created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs j SET status='running',attempts=attempts+1,first_attempt_at=COALESCE(first_attempt_at,now()),lease_until=now()+CASE WHEN j.kind='ai' THEN interval '5 minutes' ELSE interval '2 minutes' END,lease_token=$1,updated_at=now() FROM next WHERE j.id=next.id RETURNING j.id,j.kind,COALESCE(j.user_id::text,''),j.payload,j.attempts,j.first_attempt_at,j.idempotency_key`, lease).Scan(&j.ID, &j.Kind, &j.UserID, &raw, &j.Attempts, &j.FirstAttempt, &j.IdempotencyKey)
 	if errors.Is(e, pgx.ErrNoRows) {
 		if e = tx.Commit(ctx); e != nil {
 			return nil, e

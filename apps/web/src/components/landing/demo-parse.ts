@@ -1,20 +1,13 @@
 export type DemoBlock = {
-  kind: "h1" | "h2" | "p" | "li" | "todo" | "code";
+  kind: "h1" | "h2" | "p" | "li" | "ol" | "todo" | "code";
   text: string;
   done?: boolean;
+  /** The number an ordered list item was written with. */
+  n?: number;
 };
 
-export const DEMO_LIMIT = 2000;
-
-export const SAMPLE_NOTE = `# slow mornings
-i stopped checking my phone before nine.
-- coffee first
-- a walk, no podcast
-- [x] write one page
-- [ ] add the photo from the lake
-\`\`\`js
-const day = slow("coffee first")
-\`\`\``;
+// Every sample post is well under this, so none of them is cut. Only pastes past it are trimmed.
+export const DEMO_LIMIT = 12000;
 
 /** A tiny Markdown-ish parser for the landing demo. Output is plain text, never HTML. */
 export function parseDemoNote(input: string): DemoBlock[] {
@@ -36,8 +29,22 @@ export function parseDemoNote(input: string): DemoBlock[] {
     else if (/^[-*] \[[ xX]\] /.test(trimmed))
       blocks.push({ kind: "todo", text: trimmed.slice(6).trim(), done: trimmed[3] !== " " });
     else if (/^[-*] /.test(trimmed)) blocks.push({ kind: "li", text: trimmed.slice(2).trim() });
-    else blocks.push({ kind: "p", text: trimmed });
+    else if (/^\d{1,9}[.)] /.test(trimmed)) {
+      const marker = trimmed.indexOf(" ");
+      blocks.push({ kind: "ol", text: trimmed.slice(marker).trim(), n: parseInt(trimmed, 10) });
+    } else blocks.push({ kind: "p", text: trimmed });
   }
   if (code) blocks.push({ kind: "code", text: code.join("\n") });
   return blocks;
+}
+
+/** The first "# " heading outside code, without parsing the whole note. */
+export function demoTitle(input: string) {
+  let code = false;
+  for (const line of input.slice(0, DEMO_LIMIT).split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) code = !code;
+    else if (!code && trimmed.startsWith("# ")) return trimmed.slice(2).trim();
+  }
+  return "";
 }

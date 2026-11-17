@@ -10,6 +10,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={fontVariables}>
+      <head>
+        {/* General Sans is served by Fontshare under its free license, which does not allow bundling the files here. */}
+        <link rel="preconnect" href="https://api.fontshare.com" />
+        <link
+          rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f[]=general-sans@1&display=swap"
+        />
+      </head>
       <body className="bg-background font-sans text-foreground antialiased selection:bg-sky/30">
         <Providers>{children}</Providers>
       </body>

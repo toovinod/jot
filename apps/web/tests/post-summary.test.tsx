@@ -16,6 +16,8 @@ test("renders a bounded summary without accessing a full document or publication
     publishedAt: "2026-01-01T00:00:00Z",
     revision: 3,
     likes: 2,
+    views: 0,
+    tags: [],
     comments: 1,
     excerpt: "A small readable excerpt.",
     readingMinutes: 7,

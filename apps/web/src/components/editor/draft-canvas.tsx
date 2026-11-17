@@ -1,10 +1,72 @@
 "use client";
-import { ImageSquare } from "@phosphor-icons/react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type CSSProperties,
+  type RefObject,
+} from "react";
+import type { Editor } from "@tiptap/react";
+import { ImageSquare, Trash } from "@phosphor-icons/react";
 import { cn, slugify } from "@/lib/utils";
 import { Article } from "../document";
-import { RichEditor } from "./rich-editor";
+import { accents } from "./appearance-panel";
+import { RichEditor, prependMarkdown } from "./rich-editor";
+import { pasteIntoField } from "./field-paste";
 import { useEditorController } from "./editor-controller";
-export function DraftCanvas() {
+
+// The writing column matches the published text column, so lines break where readers see them.
+export const columnWidths = {
+  narrow: "max-w-xl",
+  standard: "max-w-2xl",
+  wide: "max-w-4xl",
+} as const;
+const fonts = { serif: "font-serif", sans: "font-sans", mono: "font-mono" } as const;
+const limits = { title: 200, subtitle: 500 } as const;
+const imageTypes = "image/png,image/jpeg,image/gif,image/webp";
+
+/** Grows a textarea to fit its text, so nothing it holds is ever hidden behind a scroll. While
+ * the .md view hides the page it measures nothing, and it fits again once its width changes. */
+function useAutoGrow(value: string) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const fit = () => {
+      if (!element.isConnected || element.closest("[hidden]")) return;
+      element.style.height = "auto";
+      element.style.height = `${element.scrollHeight}px`;
+    };
+    fit();
+    let width = element.offsetWidth;
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            if (element.offsetWidth === width) return;
+            width = element.offsetWidth;
+            fit();
+          });
+    observer?.observe(element);
+    window.addEventListener("resize", fit);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, [value]);
+  return ref;
+}
+
+export function DraftCanvas({
+  toolbarSlot,
+  editorRef,
+}: {
+  toolbarSlot?: HTMLElement | null;
+  /** Receives the page's editor, for the prompt box that writes into it. */
+  editorRef?: RefObject<Editor | null>;
+}) {
   const {
     busy,
     uploads,
@@ -14,121 +76,207 @@ export function DraftCanvas() {
     updateDraft,
     cover,
     uploadCover,
-    words,
     editorKey,
     beginPendingWork,
     isOperationBlocked,
+    registerEditorFlush,
   } = useEditorController();
   const disabled = busy;
+  const appearance = snapshot.appearance;
+  const ownEditor = useRef<Editor | null>(null);
+  const body = editorRef ?? ownEditor;
+  const title = useAutoGrow(snapshot.title),
+    subtitle = useAutoGrow(snapshot.subtitle);
+  const [note, setNote] = useState<{ field: "title" | "subtitle"; text: string } | null>(null);
+  useEffect(() => {
+    if (!note) return;
+    const timer = setTimeout(() => setNote(null), 5000);
+    return () => clearTimeout(timer);
+  }, [note]);
+  function setTitle(value: string) {
+    updateDraft({
+      title: value,
+      ...(!(post.reservedSlug || post.published?.slug) &&
+      (!snapshot.slug || snapshot.slug === slugify(snapshot.title))
+        ? { slug: slugify(value) }
+        : {}),
+    });
+  }
+  /** A paste of several lines keeps its first line here and moves the rest to the top of the
+   * page; a paste longer than the field's limit is cut to fit. Both say so in a quiet note. */
+  function paste(field: "title" | "subtitle", event: ClipboardEvent<HTMLTextAreaElement>) {
+    const element = event.currentTarget;
+    const result = pasteIntoField(
+      element.value,
+      element.selectionStart,
+      element.selectionEnd,
+      event.clipboardData.getData("text/plain"),
+      limits[field],
+    );
+    // Without the page to take the rest, the browser's own paste keeps every word.
+    if (!result || (result.rest && !body.current)) return;
+    event.preventDefault();
+    if (field === "title") setTitle(result.value);
+    else updateDraft({ subtitle: result.value });
+    if (result.rest) prependMarkdown(body.current!, result.rest);
+    requestAnimationFrame(() => element.setSelectionRange(result.caret, result.caret));
+    const parts = [
+      result.rest && "moved the rest into the page.",
+      result.clipped && `the ${field} keeps its first ${limits[field]} characters.`,
+    ].filter(Boolean);
+    setNote({ field, text: parts.join(" ") });
+  }
+  if (preview)
+    return <Article snapshot={snapshot} author={post.author} publishedAt={post.publishedAt} />;
+  const subtitleLength = snapshot.subtitle.length;
+  const coverInput = (
+    <input
+      type="file"
+      accept={imageTypes}
+      disabled={disabled || uploads > 0}
+      className="sr-only"
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        if (file) void uploadCover(file);
+        event.target.value = "";
+      }}
+    />
+  );
+  const overlayButton =
+    "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-white/95 px-3 text-xs font-medium text-foreground shadow-[0_0_0_1px_var(--border)] backdrop-blur outline-none transition-colors hover:bg-white focus-visible:ring-3 focus-visible:ring-sky/50 focus-within:ring-3 focus-within:ring-sky/50";
   return (
-    <>
-      <main className="min-w-0 flex-1">
-        {preview ? (
-          <Article snapshot={snapshot} author={post.author} publishedAt={post.publishedAt} />
+    <div
+      className={cn("mx-auto w-full", columnWidths[appearance.width], fonts[appearance.font])}
+      // Links, quotes and checkboxes take the page accent while you write, as they will when live.
+      style={{ "--primary": accents[appearance.accent].color } as CSSProperties}
+    >
+      <div className="group/header relative mb-8">
+        {cover ? (
+          <figure className="group/cover relative mb-8">
+            <img
+              src={cover}
+              alt="Story cover"
+              className="max-h-[420px] w-full rounded-xl bg-muted object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute right-3 top-3 flex gap-2 font-sans opacity-0 transition-opacity group-hover/cover:opacity-100 group-focus-within/cover:opacity-100 [@media(hover:none)]:opacity-100">
+              <label
+                className={cn(
+                  overlayButton,
+                  (disabled || uploads > 0) && "pointer-events-none opacity-45",
+                )}
+              >
+                <ImageSquare weight="bold" aria-hidden="true" className="size-3.5" />
+                replace cover
+                {coverInput}
+              </label>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => updateDraft({ cover: "" })}
+                className={cn(overlayButton, "hover:text-destructive disabled:opacity-45")}
+              >
+                <Trash weight="bold" aria-hidden="true" className="size-3.5" />
+                remove cover
+              </button>
+            </div>
+          </figure>
         ) : (
-          <div
+          // Out of the way until the pointer or keyboard reaches the header; always shown on touch.
+          <label
             className={cn(
-              "mx-auto my-4 rounded-[28px] border border-border bg-white px-6 py-12 shadow-[0_4px_0_var(--border)] sm:my-8 sm:px-12 sm:py-16",
-              snapshot.appearance.width === "narrow"
-                ? "max-w-2xl"
-                : snapshot.appearance.width === "wide"
-                  ? "max-w-5xl"
-                  : "max-w-3xl",
-              snapshot.appearance.font === "serif"
-                ? "font-serif"
-                : snapshot.appearance.font === "mono"
-                  ? "font-mono"
-                  : "font-sans",
+              "absolute -top-8 left-0 inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-2.5 font-sans text-xs font-medium text-muted-foreground opacity-0 outline-none transition-[opacity,background-color,color] hover:bg-sky-soft hover:text-foreground focus-within:opacity-100 focus-within:ring-3 focus-within:ring-sky/50 group-hover/header:opacity-100 group-focus-within/header:opacity-100 [@media(hover:none)]:opacity-100",
+              (disabled || uploads > 0) && "pointer-events-none opacity-45",
             )}
           >
-            <div className="mb-10">
-              <p className="mb-7 font-mono text-xs text-sky-deep">
-                {post.published ? "a new draft of your live page" : "a little room to begin"}
-              </p>
-              <label className="sr-only" htmlFor="story-title">
-                Story title
-              </label>
-              <textarea
-                id="story-title"
-                value={snapshot.title}
-                rows={2}
-                maxLength={200}
-                placeholder="An untitled thought"
-                disabled={disabled}
-                onChange={(e) => {
-                  const title = e.target.value.replace(/\n/g, "");
-                  updateDraft({
-                    title,
-                    ...(!(post.reservedSlug || post.published?.slug) &&
-                    (!snapshot.slug || snapshot.slug === slugify(snapshot.title))
-                      ? { slug: slugify(title) }
-                      : {}),
-                  });
-                }}
-                className="w-full resize-none bg-transparent text-4xl leading-[1.15] tracking-tight outline-none placeholder:text-muted-foreground/40 sm:text-5xl"
-              />
-              <label className="sr-only" htmlFor="story-subtitle">
-                Story subtitle
-              </label>
-              <textarea
-                id="story-subtitle"
-                value={snapshot.subtitle}
-                rows={2}
-                maxLength={500}
-                disabled={disabled}
-                onChange={(e) => updateDraft({ subtitle: e.target.value })}
-                placeholder="A subtitle, if the thought needs a little more room…"
-                className="mt-4 w-full resize-none bg-transparent text-xl leading-8 text-muted-foreground outline-none placeholder:text-muted-foreground/40"
-              />
-              <div className="mt-4 flex flex-wrap items-center gap-4 font-sans text-xs text-muted-foreground">
-                <label
-                  className={cn(
-                    "inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-3 py-1.5 font-medium transition-colors hover:bg-sky-soft hover:text-sky-deep focus-within:ring-2 focus-within:ring-ring",
-                    (disabled || uploads > 0) && "pointer-events-none opacity-40",
-                  )}
-                >
-                  <ImageSquare size={14} weight="bold" />
-                  {cover ? "Replace cover" : "Add a cover image"}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif"
-                    disabled={disabled || uploads > 0}
-                    className="sr-only"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void uploadCover(file);
-                    }}
-                  />
-                </label>
-                {cover && (
-                  <button disabled={disabled} onClick={() => updateDraft({ cover: "" })}>
-                    Remove cover
-                  </button>
-                )}
-                <span className="ml-auto">
-                  {words} words · {Math.max(1, Math.ceil(words / 220))} min read
-                </span>
-              </div>
-              {cover && (
-                <img
-                  src={cover}
-                  alt="Story cover"
-                  className="mt-7 max-h-96 w-full rounded-2xl object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              )}
-            </div>
-            <RichEditor
-              key={editorKey}
-              document={snapshot.content}
-              onChange={(content) => updateDraft({ content })}
-              disabled={disabled}
-              beginPendingWork={beginPendingWork}
-              isOperationBlocked={isOperationBlocked}
-            />
-          </div>
+            <ImageSquare weight="bold" aria-hidden="true" className="size-3.5" />
+            {uploads > 0 ? "uploading" : "add cover"}
+            {coverInput}
+          </label>
         )}
-      </main>
-    </>
+        <label className="sr-only" htmlFor="story-title">
+          Story title
+        </label>
+        <textarea
+          ref={title}
+          id="story-title"
+          value={snapshot.title}
+          rows={1}
+          maxLength={limits.title}
+          placeholder="title"
+          disabled={disabled}
+          aria-describedby={note?.field === "title" ? "story-title-note" : undefined}
+          onChange={(e) => setTitle(e.target.value.replace(/\n/g, ""))}
+          onPaste={(e) => paste("title", e)}
+          onKeyDown={(e) => {
+            // Enter moves on to the subtitle instead of breaking the title.
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              document.getElementById("story-subtitle")?.focus();
+            }
+          }}
+          className="block w-full resize-none overflow-hidden bg-transparent text-[clamp(2rem,1.6rem+1.6vw,2.75rem)] font-medium leading-[1.12] tracking-[-0.035em] outline-none placeholder:text-muted-foreground/75"
+        />
+        {note?.field === "title" && (
+          <p
+            id="story-title-note"
+            role="status"
+            className="mt-1 font-sans text-xs text-muted-foreground"
+          >
+            {note.text}
+          </p>
+        )}
+        <label className="sr-only" htmlFor="story-subtitle">
+          Story subtitle
+        </label>
+        <textarea
+          ref={subtitle}
+          id="story-subtitle"
+          value={snapshot.subtitle}
+          rows={1}
+          maxLength={limits.subtitle}
+          disabled={disabled}
+          aria-describedby="story-subtitle-hint"
+          onChange={(e) => updateDraft({ subtitle: e.target.value })}
+          onPaste={(e) => paste("subtitle", e)}
+          placeholder="subtitle"
+          className="mt-2 block w-full resize-none overflow-hidden bg-transparent text-lg leading-[1.5] text-muted-foreground outline-none placeholder:text-base placeholder:text-muted-foreground/75"
+        />
+        <p
+          id="story-subtitle-hint"
+          role="status"
+          className="mt-1 flex flex-wrap gap-x-3 font-sans text-xs text-muted-foreground empty:hidden"
+        >
+          {note?.field === "subtitle" && <span>{note.text}</span>}
+          {subtitleLength >= limits.subtitle ? (
+            <span className="text-[#9a6700]">
+              subtitles stop at {limits.subtitle} characters. the rest can go in the page.
+            </span>
+          ) : (
+            subtitleLength > 400 && (
+              <span className="tabular-nums">
+                {subtitleLength}/{limits.subtitle}
+              </span>
+            )
+          )}
+        </p>
+      </div>
+      <RichEditor
+        key={editorKey}
+        document={snapshot.content}
+        onChange={(content) => updateDraft({ content })}
+        disabled={disabled}
+        beginPendingWork={beginPendingWork}
+        isOperationBlocked={isOperationBlocked}
+        registerFlush={registerEditorFlush}
+        toolbarSlot={toolbarSlot}
+        editorRef={body}
+        onImportTitle={(value) => {
+          if (snapshot.title.trim()) return false;
+          setTitle(value.slice(0, limits.title));
+          return true;
+        }}
+      />
+    </div>
   );
 }

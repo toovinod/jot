@@ -1,7 +1,8 @@
 import type { Editor, EditorEvents } from "@tiptap/react";
 import { upload } from "@/lib/api";
+import { friendlyError } from "@/lib/errors";
 export function isSupportedImage(file: File) {
-  return /^image\/(png|jpeg|gif)$/.test(file.type) && file.size <= 10 * 1024 * 1024;
+  return /^image\/(png|jpeg|gif|webp)$/.test(file.type) && file.size <= 10 * 1024 * 1024;
 }
 export async function uploadEditorImages({
   editor,
@@ -23,7 +24,7 @@ export async function uploadEditorImages({
   const supported = files.filter(isSupportedImage);
   if (supported.length !== files.length)
     onError(
-      "Only PNG, JPEG, and GIF images smaller than 10 MB can be uploaded. Video is not supported.",
+      "only PNG, JPEG, GIF and WebP images under 10 MB can be uploaded. video isn't supported.",
     );
   if (!supported.length) return;
   onPendingChange(supported.length);
@@ -40,7 +41,7 @@ export async function uploadEditorImages({
         if (editor.isDestroyed) continue;
         if (isDisabled()) {
           onError(
-            "Upload finished while the editor was busy. Upload the file again after the operation finishes.",
+            "an upload finished while the editor was busy. upload the file again once it finishes.",
           );
           continue;
         }
@@ -64,7 +65,7 @@ export async function uploadEditorImages({
         });
         anchor = insertedEnd;
       } catch (error) {
-        onError((error as Error).message);
+        onError(friendlyError(error, { auto: false }).message);
       } finally {
         onPendingChange(-1);
       }

@@ -1,6 +1,6 @@
 import type { PostSummary } from "@jot/contracts";
 
-export type DashboardStats = { live: number; drafts: number; likes: number };
+export type DashboardStats = { live: number; drafts: number; likes: number; reads: number };
 
 export function summarize(posts: PostSummary[]): DashboardStats {
   return posts.reduce(
@@ -8,9 +8,26 @@ export function summarize(posts: PostSummary[]): DashboardStats {
       live: stats.live + (post.isPublished ? 1 : 0),
       drafts: stats.drafts + (post.isPublished ? 0 : 1),
       likes: stats.likes + (post.likes || 0),
+      reads: stats.reads + (post.views || 0),
     }),
-    { live: 0, drafts: 0, likes: 0 },
+    { live: 0, drafts: 0, likes: 0, reads: 0 },
   );
+}
+
+export type Filter = "all" | "live" | "drafts" | "unlisted";
+
+/** Unlisted means the live copy is unlisted; a draft's own visibility is not live yet. */
+export function matches(post: PostSummary, filter: Filter) {
+  if (filter === "live") return post.isPublished;
+  if (filter === "drafts") return !post.isPublished;
+  if (filter === "unlisted") return post.isPublished && post.liveVisibility === "unlisted";
+  return true;
+}
+
+/** Where the live copy stands: unpublished pages are drafts even if their draft says unlisted. */
+export function liveStatus(post: PostSummary): "draft" | "live" | "unlisted" {
+  if (!post.isPublished) return "draft";
+  return post.liveVisibility === "unlisted" ? "unlisted" : "live";
 }
 
 const MAX_POSTS = 2000;

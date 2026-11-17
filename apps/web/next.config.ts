@@ -7,6 +7,8 @@ const config: NextConfig = {
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${api}/api/:path*` },
+      { source: "/rss.xml", destination: `${api}/api/rss` },
+      { source: "/@:handle/rss.xml", destination: `${api}/api/authors/:handle/rss` },
       { source: "/media/:path*", destination: `${api}/media/:path*` },
     ];
   },

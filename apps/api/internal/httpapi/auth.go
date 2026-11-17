@@ -53,6 +53,9 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 	t := security.RandomToken()
 	expires := time.Now().Add(30 * 24 * time.Hour)
 	_, e = tx.Exec(r.Context(), `INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,$3)`, security.HashToken(t), u.ID, expires)
+	if e == nil && s.Config.EmailEnabled() {
+		e = queueAccountEmail(r.Context(), tx, u.ID, "verification", in.Email, u.Name)
+	}
 	if e != nil {
 		writeInternalError(w, e)
 		return

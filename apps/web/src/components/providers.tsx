@@ -17,7 +17,7 @@ const Context = createContext<{
   user: null,
   loading: true,
   authError: null,
-  config: { aiEnabled: false, emailEnabled: false },
+  config: { aiEnabled: false, emailEnabled: false, domainTarget: "" },
   configError: "",
   setUser: () => {},
   refresh: async () => {},
@@ -27,7 +27,11 @@ export function Providers({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null),
     [loading, setLoading] = useState(true),
     [authError, setAuthError] = useState<string | null>(null),
-    [config, setConfig] = useState<Config>({ aiEnabled: false, emailEnabled: false }),
+    [config, setConfig] = useState<Config>({
+      aiEnabled: false,
+      emailEnabled: false,
+      domainTarget: "",
+    }),
     [configError, setConfigError] = useState("");
   const configVersion = useRef(0);
   const sessionVersion = useRef(0);

@@ -25,18 +25,20 @@ const post: Post = {
   content: { type: "doc", content: [{ type: "paragraph" }] },
   appearance: defaultAppearance,
   visibility: "public",
+  tags: [],
   revision: 2,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
   likes: 0,
   comments: 0,
+  views: 0,
 };
 beforeAll(() => {
   const window = new Window({ url: "http://localhost/" });
   for (const [name, value] of Object.entries({
     window,
     document: window.document,
-    sessionStorage: window.sessionStorage,
+    localStorage: window.localStorage,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
     IS_REACT_ACT_ENVIRONMENT: true,
@@ -50,7 +52,7 @@ afterEach(async () => {
     root = null;
   }
   globalThis.fetch = originalFetch;
-  sessionStorage.clear();
+  localStorage.clear();
 });
 function Probe() {
   latest = useEditorController();
@@ -87,7 +89,7 @@ async function mount() {
 }
 describe("editor controller integration", () => {
   test("offers recovery without replacing the server draft and preserves optimistic conflicts on explicit recovery", async () => {
-    new DraftRecovery(sessionStorage, "owner", "post").write(
+    new DraftRecovery(localStorage, "owner", "post").write(
       { ...post, title: "Local unsaved writing" },
       1,
     );
@@ -106,7 +108,7 @@ describe("editor controller integration", () => {
     expect(attemptedRevision).toBe(1);
     expect(latest.snapshot.title).toBe("Local unsaved writing");
     expect(latest.saveState.conflict).toBe(true);
-    expect(new DraftRecovery(sessionStorage, "owner", "post").read()?.snapshot.title).toBe(
+    expect(new DraftRecovery(localStorage, "owner", "post").read()?.snapshot.title).toBe(
       "Local unsaved writing",
     );
   });
@@ -135,11 +137,11 @@ describe("editor controller integration", () => {
     });
     expect(calls).toEqual(["PUT /api/posts/post", "POST /api/posts/post/publish"]);
     expect(latest.saveState.dirty).toBe(false);
-    expect(new DraftRecovery(sessionStorage, "owner", "post").read()).toBeNull();
+    expect(new DraftRecovery(localStorage, "owner", "post").read()).toBeNull();
   });
   test("renders lean revision summaries and restores by ID without downloading history documents", async () => {
     const summaries: RevisionSummary[] = [
-      { id: 7, title: "A lean earlier edition", createdAt: "2026-01-01T00:00:00Z" },
+      { id: 7, number: 3, title: "A lean earlier edition", createdAt: "2026-01-01T00:00:00Z" },
     ];
     let restored: unknown;
     globalThis.fetch = (async (url, options) => {
@@ -155,6 +157,7 @@ describe("editor controller integration", () => {
       await latest.loadPublicationHistory();
     });
     expect(container.textContent).toContain("A lean earlier edition");
+    expect(container.textContent).toContain("edition 3");
     expect(latest.revisions[0]).not.toHaveProperty("snapshot");
     await act(async () => {
       latest.restoreRevision(7);
@@ -165,8 +168,12 @@ describe("editor controller integration", () => {
   });
   test("icon actions have stable accessible names independent of responsive text visibility", async () => {
     const container = await mount();
-    for (const name of ["Customize", "Assist", "Preview", "Publication history"]) {
+    for (const name of ["Page settings", "Preview"]) {
       expect(container.querySelector(`button[aria-label="${name}"]`)).not.toBeNull();
     }
+    const views = [
+      ...container.querySelectorAll('[role="tablist"][aria-label="View"] [role="tab"]'),
+    ];
+    expect(views.map((tab) => tab.textContent)).toEqual(["page", ".md"]);
   });
 });

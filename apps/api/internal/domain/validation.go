@@ -11,6 +11,17 @@ import (
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_]{3,32}$`)
+var tagPattern = regexp.MustCompile(`^[a-z0-9-]{1,24}$`)
+
+const MaxTags = 5
+
+// MaxDocumentNodes and MaxDocumentText bound one document: nodes, and UTF-8 bytes of text.
+const (
+	MaxDocumentNodes = 50000
+	MaxDocumentText  = 500000
+)
+
+func ValidTag(v string) bool { return tagPattern.MatchString(v) }
 
 func oneOf(s string, values ...string) bool {
 	for _, v := range values {
@@ -60,6 +71,16 @@ func ValidateSnapshot(s Snapshot, publish bool) error {
 		}
 		seen[v] = true
 	}
+	if len(s.Tags) > MaxTags {
+		return errors.New("Use at most 5 tags")
+	}
+	seenTags := map[string]bool{}
+	for _, tag := range s.Tags {
+		if !ValidTag(tag) || seenTags[tag] {
+			return errors.New("Tags must be unique and use 1-24 lowercase letters, numbers or hyphens")
+		}
+		seenTags[tag] = true
+	}
 	if s.Content.Type != "doc" {
 		return errors.New("Content must be a document")
 	}
@@ -73,7 +94,7 @@ func validateNode(n Node, depth int, count, size *int) error {
 	if !ValidText(n.Text) {
 		return errors.New("Text cannot contain the NUL character")
 	}
-	if depth > 32 || *count > 20000 || *size > 500000 || !oneOf(n.Type, "doc", "paragraph", "text", "heading", "bulletList", "orderedList", "listItem", "blockquote", "codeBlock", "hardBreak", "horizontalRule", "image", "table", "tableRow", "tableCell", "tableHeader", "taskList", "taskItem") {
+	if depth > 32 || *count > MaxDocumentNodes || *size > MaxDocumentText || !oneOf(n.Type, "doc", "paragraph", "text", "heading", "bulletList", "orderedList", "listItem", "blockquote", "codeBlock", "hardBreak", "horizontalRule", "image", "table", "tableRow", "tableCell", "tableHeader", "taskList", "taskItem") {
 		return errors.New("Unsupported or oversized document")
 	}
 	if n.Type == "text" && (len(n.Content) > 0 || len(n.Text) == 0) {

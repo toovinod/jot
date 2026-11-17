@@ -1,0 +1,54 @@
+/* Token colors for highlighted code. Code blocks sit on a dark surface in light and dark page
+   themes alike, so one palette reads well in both. */
+.hljs-comment,
+.hljs-quote,
+.hljs-meta {
+  color: #8b8f86;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag {
+  color: #f0a07a;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-char\.escape_ {
+  color: #a8d5a2;
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #f2cc8f;
+}
+.hljs-title,
+.hljs-section,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: #8fbae8;
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-property,
+.hljs-tag .hljs-name {
+  color: #c9a7e8;
+}
+.hljs-built_in,
+.hljs-type,
+.hljs-params {
+  color: #7fd1c7;
+}
+.hljs-deletion {
+  color: #f08b8f;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}

@@ -69,3 +69,25 @@ func TestDocumentTextSeparatesBreaksTasksAndTableCells(t *testing.T) {
 		t.Fatalf("incorrect semantic text: %q", got)
 	}
 }
+
+func TestDocumentNodeAndTextLimits(t *testing.T) {
+	build := func(nodes, textBytes int) Snapshot {
+		s := EmptySnapshot()
+		s.Content = Node{Type: "doc"}
+		for n := 1; n < nodes; n++ {
+			s.Content.Content = append(s.Content.Content, Node{Type: "horizontalRule"})
+		}
+		s.Content.Content = append(s.Content.Content[:len(s.Content.Content)-1], Node{Type: "paragraph", Content: []Node{{Type: "text", Text: strings.Repeat("a", textBytes)}}})
+		return s
+	}
+	// doc + rules + one paragraph with one text node.
+	if e := ValidateSnapshot(build(MaxDocumentNodes-1, 500000), false); e != nil {
+		t.Fatalf("limit document rejected: %v", e)
+	}
+	if ValidateSnapshot(build(MaxDocumentNodes, 1), false) == nil {
+		t.Fatal("document over the node limit accepted")
+	}
+	if ValidateSnapshot(build(10, 500001), false) == nil {
+		t.Fatal("document over the text limit accepted")
+	}
+}

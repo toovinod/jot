@@ -6,6 +6,7 @@
     "DATABASE_URL_UNPOOLED",
     "PGPASSWORD",
     "APP_ORIGIN",
+    "CUSTOM_DOMAIN_TARGET",
     "RESEND_API_KEY",
     "EMAIL_FROM",
     "OPENAI_API_KEY",
@@ -35,7 +36,8 @@
     "SEED_USERNAME",
     "GOTOOLCHAIN",
     "APP_ENV",
-    "TRUSTED_PROXY_CIDRS"
+    "TRUSTED_PROXY_CIDRS",
+    "VIEW_HASH_SECRET"
   ],
   "tasks": {
     "dev": {

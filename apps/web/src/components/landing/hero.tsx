@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
-import { Bubble, Flyer, House, SkyScene, Trail } from "@/components/world/sky";
-import { softItalic, useStartHref } from "./reveal";
+import { Flyer, SkyScene } from "@/components/world/sky";
+import { useStartHref } from "./reveal";
 
 const rise = (delay: number) => ({
   initial: { opacity: 0, y: 24 },
@@ -19,21 +19,18 @@ export function Hero() {
       className="min-h-[720px] md:min-h-[800px]"
       decor={
         <>
-          <Trail
-            viewBox="0 0 1000 800"
-            d="M120 560 C260 500 380 660 540 610 S800 640 900 690"
-            className="text-white/80"
-          />
-          <Flyer tag="/@maya/slow-mornings" className="left-[6%] top-[540px]" />
           <Flyer
-            tag="/@dev/why-we-left-redis"
-            className="left-[54%] top-[590px] hidden sm:flex"
+            kind="page"
+            tag="⌘V from Google Docs"
+            className="left-[5%] top-[44%] hidden md:flex"
+          />
+          <Flyer
+            kind="book"
+            tag="import notes.md"
+            className="right-[6%] top-[26%] hidden md:flex"
             delay={-2.2}
             size="size-8"
           />
-          <Bubble className="right-[10%] top-[612px] hidden md:block">+1 reader subscribed</Bubble>
-          <House className="bottom-[86px] right-[14%] hidden md:block" />
-          <House door="sky" className="bottom-12 left-[24%] scale-90" />
         </>
       }
     >
@@ -42,30 +39,30 @@ export function Hero() {
           {...rise(0)}
           className="inline-flex items-center gap-2 rounded-full border border-white/35 bg-white/15 py-1.5 pl-1.5 pr-3 font-mono text-xs backdrop-blur-md"
         >
-          <span className="rounded-full bg-white px-2 py-0.5 text-ink">open source</span>a home for
-          your words at /@you
+          <span className="rounded-full bg-white px-2 py-0.5 text-ink">open source</span>for notes
+          that deserve a link
         </motion.p>
         <motion.h1
           {...rise(0.08)}
-          className="mt-5 font-display text-[clamp(52px,10.5vw,128px)] font-extrabold leading-[0.86] tracking-[-0.055em] [text-shadow:0_4px_0_rgba(0,50,120,.18)]"
+          className="mt-5 font-display text-[clamp(52px,10.5vw,128px)] font-[450] leading-[0.95] tracking-[-0.055em] [text-shadow:0_4px_0_rgba(0,50,120,.18)]"
         >
           paste the mess.
           <br />
-          <em className={`${softItalic} inline-block text-[#fff8e6]`}>publish the page.</em>
+          <span className="text-[#fff8e6]">publish the page.</span>
         </motion.h1>
         <motion.p
           {...rise(0.16)}
           className="on-sky mx-auto mt-6 max-w-xl text-lg font-medium leading-relaxed text-white"
         >
-          bring notes from Google Docs, Notion, Word, Apple Notes or plain Markdown. jot keeps your
-          headings, lists, tables and code, and gives the page its own link.
+          jot turns the notes you already have into a clean, readable page with its own link. no
+          blog to set up first.
         </motion.p>
         <motion.div {...rise(0.24)} className="mt-8 flex flex-wrap justify-center gap-3">
           <Button size="lg" asChild>
             <Link href={start}>start writing</Link>
           </Button>
           <Button size="lg" variant="outline" asChild>
-            <Link href="/discover">read a real page</Link>
+            <Link href="/discover">browse pages</Link>
           </Button>
         </motion.div>
       </div>

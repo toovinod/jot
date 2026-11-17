@@ -2,8 +2,25 @@
 import { useId, useRef, type ReactNode } from "react";
 import { motion, useReducedMotionConfig } from "motion/react";
 import { cn } from "@/lib/utils";
-import { JotMark } from "@/components/brand/logo";
 import { useParallax } from "./use-parallax";
+import { Critter, type CritterKind } from "./critters";
+import { PixelArt } from "./pixel";
+import { paintSky } from "./pixel-sky";
+
+const heroSky = {
+  cols: 240,
+  rows: 130,
+  horizon: 110,
+  hills: [110, 117, 123],
+  clouds: [
+    { row: 26, col: 10 },
+    { row: 70, col: 206, small: true },
+    { row: 12, col: 150, small: true },
+  ],
+  sun: { row: 4, col: 230, radius: 17 },
+};
+const heroCells = paintSky({ ...heroSky, fringeBottom: 6 });
+const closingCells = paintSky({ ...heroSky, fringeTop: 6, fringeBottom: 6, seed: 9 });
 
 export function Sun({ className }: { className?: string }) {
   return (
@@ -22,7 +39,7 @@ export function Cloud({ className, depth = 6 }: { className?: string; depth?: nu
   return (
     <svg
       data-depth={depth}
-      viewBox="0 0 150 60"
+      viewBox="0 -12 150 72"
       className={cn("absolute w-36 drop-shadow-[0_6px_0_rgba(0,60,140,.12)]", className)}
     >
       <path
@@ -111,7 +128,9 @@ export function Flyer({
   className,
   delay = 0,
   size = "size-10",
+  kind = "plane",
 }: {
+  kind?: CritterKind;
   tag?: string;
   className?: string;
   delay?: number;
@@ -123,7 +142,7 @@ export function Flyer({
       animate={{ x: [0, 22, 0], y: [0, -16, 0], rotate: [-6, 4, -6] }}
       transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay }}
     >
-      <JotMark className={cn("-rotate-[30deg] text-ink", size)} />
+      <Critter kind={kind} className={size} blinkDelay={-delay} />
       {tag && (
         <span className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-2.5 py-1.5 font-mono text-[11px] text-ink shadow-[0_3px_0_rgba(0,40,90,.18)]">
           <span className="size-1.5 rounded-full bg-grass-2" />
@@ -165,34 +184,6 @@ export function Grain() {
   );
 }
 
-export function Trail({
-  d,
-  viewBox,
-  className,
-}: {
-  d: string;
-  viewBox: string;
-  className?: string;
-}) {
-  return (
-    <svg
-      viewBox={viewBox}
-      preserveAspectRatio="none"
-      className={cn("absolute inset-0 size-full", className)}
-    >
-      <path
-        d={d}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeDasharray="6 7"
-        vectorEffect="non-scaling-stroke"
-        className="animate-[trail-dash_1.2s_linear_infinite] motion-reduce:animate-none"
-      />
-    </svg>
-  );
-}
-
 const skyGradient =
   "bg-[linear-gradient(180deg,var(--sky-deep)_0%,var(--sky)_42%,var(--sky-mid)_78%,var(--sky-light)_100%)]";
 
@@ -201,8 +192,11 @@ export function SkyScene({
   children,
   className,
   decor,
+  fringe = "bottom",
 }: {
   variant: "hero" | "panel" | "banner" | "strip";
+  /** Hero skies crumble into the page at the bottom, or at both edges when mid-page. */
+  fringe?: "bottom" | "both";
   children?: ReactNode;
   className?: string;
   decor?: ReactNode;
@@ -216,19 +210,20 @@ export function SkyScene({
         "relative isolate overflow-hidden",
         variant === "strip"
           ? "bg-[linear-gradient(180deg,var(--background)_0%,var(--sky-light)_45%,var(--sky-mid)_100%)]"
-          : skyGradient,
+          : variant !== "hero" && skyGradient,
         variant !== "strip" && "text-white",
         className,
       )}
     >
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
         {variant === "hero" && (
-          <>
-            <Sun className="-right-24 -top-28" />
-            <Cloud className="left-[3%] top-24 w-28 opacity-90" depth={6} />
-            <Cloud className="right-[8%] top-[46%] w-24 opacity-70" depth={10} />
-            <Hills layers={3} className="h-64" />
-          </>
+          <PixelArt
+            cols={heroSky.cols}
+            rows={heroSky.rows}
+            cells={fringe === "both" ? closingCells : heroCells}
+            fit="cover"
+            soft
+          />
         )}
         {variant === "panel" && (
           <>
@@ -255,7 +250,7 @@ export function SkyScene({
         )}
         {variant === "strip" && <Hills layers={2} className="h-28" />}
         {decor}
-        {variant !== "strip" && <Grain />}
+        {variant !== "strip" && variant !== "hero" && <Grain />}
       </div>
       {children}
     </div>

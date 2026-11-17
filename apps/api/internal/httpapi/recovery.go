@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jot-project/jot/apps/api/internal/security"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -85,16 +87,7 @@ func (s *Server) requestAccountEmail(w http.ResponseWriter, r *http.Request, id,
 		writeJSON(w, 200, map[string]bool{"ok": true})
 		return
 	}
-	raw := security.RandomToken()
-	expires := time.Now().Add(time.Hour)
-	_, e = tx.Exec(r.Context(), `INSERT INTO account_tokens(token_hash,user_id,kind,expires_at) VALUES($1,$2,$3,$4)`, security.HashToken(raw), id, kind, expires)
-	if e != nil {
-		writeInternalError(w, e)
-		return
-	}
-	payload := map[string]string{"token": raw, "email": email, "name": name}
-	_, e = tx.Exec(r.Context(), `INSERT INTO jobs(id,kind,user_id,payload,idempotency_key) VALUES($1,$2,$3,$4,$5)`, uuid.NewString(), kind, id, encodeJSON(payload), kind+":"+security.HashToken(raw))
-	if e != nil {
+	if e = queueAccountEmail(r.Context(), tx, id, kind, email, name); e != nil {
 		writeInternalError(w, e)
 		return
 	}
@@ -103,6 +96,18 @@ func (s *Server) requestAccountEmail(w http.ResponseWriter, r *http.Request, id,
 		return
 	}
 	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+// queueAccountEmail stores a one-hour single-use token and queues its email inside tx.
+func queueAccountEmail(ctx context.Context, tx pgx.Tx, id, kind, email, name string) error {
+	raw := security.RandomToken()
+	_, e := tx.Exec(ctx, `INSERT INTO account_tokens(token_hash,user_id,kind,expires_at) VALUES($1,$2,$3,$4)`, security.HashToken(raw), id, kind, time.Now().Add(time.Hour))
+	if e != nil {
+		return e
+	}
+	payload := map[string]string{"token": raw, "email": email, "name": name}
+	_, e = tx.Exec(ctx, `INSERT INTO jobs(id,kind,user_id,payload,idempotency_key) VALUES($1,$2,$3,$4,$5)`, uuid.NewString(), kind, id, encodeJSON(payload), kind+":"+security.HashToken(raw))
+	return e
 }
 func (s *Server) confirmVerification(w http.ResponseWriter, r *http.Request) {
 	var in struct {

@@ -27,12 +27,12 @@ func (s *Server) security(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		if r.Method != "GET" && r.Method != "HEAD" && r.Method != "OPTIONS" {
-			if r.URL.Path != "/api/subscriptions/one-click" && r.Header.Get("Origin") != s.Config.Origin {
+			if r.URL.Path != "/api/subscriptions/one-click" && r.Header.Get("Origin") != s.Config.Origin && !s.customDomainOrigin(r) {
 				writeError(w, 403, "Request origin is not allowed", "origin")
 				return
 			}
 			ip := s.clientIP(r)
-			if !s.limiter.allow(ip, time.Now(), 120, time.Minute) {
+			if !s.limiter.allow("ip:"+ip, time.Now(), 120, time.Minute) {
 				writeError(w, 429, "Too many requests; try again shortly", "rate_limit")
 				return
 			}
@@ -71,11 +71,18 @@ func writeInternalError(w http.ResponseWriter, e error) {
 	writeError(w, 500, "Unable to complete request", "internal")
 }
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
+	return decodeJSONBodyLimit(w, r, v, 2<<20)
+}
+
+// maxPostBodyBytes fits a post save at the document limits (50,000 nodes, 500,000 text bytes) with marks and links.
+const maxPostBodyBytes = 8 << 20
+
+func decodeJSONBodyLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
 	if e := d.Decode(v); e != nil {
-		writeError(w, 400, "Invalid request body", "invalid_request")
+		writeDecodeError(w, e)
 		return false
 	}
 	if d.Decode(new(any)) != io.EOF {
@@ -83,6 +90,23 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) bool {
 		return false
 	}
 	return true
+}
+
+// writeDecodeError says what was wrong with a request body, so clients can show something useful.
+func writeDecodeError(w http.ResponseWriter, e error) {
+	var tooLarge *http.MaxBytesError
+	var typeErr *json.UnmarshalTypeError
+	switch {
+	case errors.As(e, &tooLarge):
+		writeError(w, 413, "This request is too large to save", "too_large")
+	case strings.HasPrefix(e.Error(), "json: unknown field "):
+		field := strings.TrimPrefix(e.Error(), "json: unknown field ")
+		writeError(w, 400, "The server does not accept the field "+field+". It may be older than the app; restart it and try again", "unknown_field")
+	case errors.As(e, &typeErr) && typeErr.Field != "":
+		writeError(w, 400, `The field "`+typeErr.Field+`" has the wrong type`, "invalid_request")
+	default:
+		writeError(w, 400, "The request body is not valid JSON", "invalid_request")
+	}
 }
 func integer(v string, def, min, max int) int {
 	n, e := strconv.Atoi(v)
@@ -122,31 +146,58 @@ type rateEntry struct {
 	expiresAt time.Time
 	count     int
 }
+
+// rateLimiter keeps fixed-window counters in memory, in one bounded store per purpose (the key prefix before the
+// first ":"), so flooding one purpose with new keys cannot push out the counters of another. A full store first
+// drops its expired counters. If it is still full, a new key of a low-value purpose (evictingRatePurposes) evicts
+// the counter closest to expiry, while a new key of any other purpose is refused until counters expire: failing
+// closed means nobody can reset a login, signup or client-address counter by churning keys. Existing counters
+// always keep counting.
 type rateLimiter struct {
-	mu      sync.Mutex
-	entries map[string]rateEntry
+	mu     sync.Mutex
+	stores map[string]map[string]rateEntry
 }
 
+const rateLimiterKeysPerPurpose = 10000
+
+// evictingRatePurposes guard only cheap, idempotent work, where forgetting a counter is harmless.
+var evictingRatePurposes = map[string]bool{"view": true}
+
 func (l *rateLimiter) allow(key string, now time.Time, limit int, window time.Duration) bool {
+	purpose, _, _ := strings.Cut(key, ":")
 	key = security.HashToken(key)
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.entries) >= 10000 {
-		for k, e := range l.entries {
+	if l.stores == nil {
+		l.stores = map[string]map[string]rateEntry{}
+	}
+	entries := l.stores[purpose]
+	if entries == nil {
+		entries = map[string]rateEntry{}
+		l.stores[purpose] = entries
+	}
+	if _, exists := entries[key]; !exists && len(entries) >= rateLimiterKeysPerPurpose {
+		oldest := ""
+		for k, e := range entries {
 			if !now.Before(e.expiresAt) {
-				delete(l.entries, k)
+				delete(entries, k)
+			} else if oldest == "" || e.expiresAt.Before(entries[oldest].expiresAt) {
+				oldest = k
 			}
 		}
-		if _, exists := l.entries[key]; !exists && len(l.entries) >= 10000 {
-			return false
+		if len(entries) >= rateLimiterKeysPerPurpose {
+			if !evictingRatePurposes[purpose] {
+				return false
+			}
+			delete(entries, oldest)
 		}
 	}
-	e := l.entries[key]
+	e := entries[key]
 	if !now.Before(e.expiresAt) {
 		e = rateEntry{expiresAt: now.Add(window)}
 	}
 	e.count++
-	l.entries[key] = e
+	entries[key] = e
 	return e.count <= limit
 }
 func (s *Server) clientIP(r *http.Request) string {

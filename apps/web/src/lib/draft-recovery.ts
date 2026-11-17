@@ -14,7 +14,18 @@ export function sameDraftSnapshot(left: Snapshot, right: Snapshot): boolean {
     );
   return canonical(left) === canonical(right);
 }
-/** Tab-scoped recovery is separate from server state and never silently replaces a newer draft. */
+const prefix = "jot:draft:";
+/** Removes every local recovery copy in this browser, for example on logout. */
+export function clearAllDraftRecovery() {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(prefix)) localStorage.removeItem(key);
+    }
+  } catch {}
+}
+/** Browser recovery (localStorage, per user and post) is separate from server state, survives a
+ * closed tab, and never silently replaces a newer draft. */
 export class DraftRecovery {
   private key: string;
   constructor(
@@ -22,7 +33,7 @@ export class DraftRecovery {
     ownerId: string,
     postId: string,
   ) {
-    this.key = `jot:draft:${ownerId}:${postId}`;
+    this.key = `${prefix}${ownerId}:${postId}`;
   }
   read(): RecoverableDraft | null {
     try {

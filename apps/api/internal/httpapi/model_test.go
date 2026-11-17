@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,7 +65,7 @@ func TestRetryBackoffAndRateLimit(t *testing.T) {
 	if jobs.RetryDelay(1) != 30*time.Second || jobs.RetryDelay(5) != 8*time.Minute || jobs.RetryDelay(100) != 8*time.Minute {
 		t.Fatal("unbounded or incorrect backoff")
 	}
-	l := rateLimiter{entries: map[string]rateEntry{}}
+	l := rateLimiter{}
 	now := time.Now()
 	if !l.allow("a", now, 1, time.Minute) || l.allow("a", now, 1, time.Minute) || !l.allow("a", now.Add(2*time.Minute), 1, time.Minute) {
 		t.Fatal("limiter window incorrect")
@@ -70,7 +73,7 @@ func TestRetryBackoffAndRateLimit(t *testing.T) {
 }
 
 func TestRateLimiterPreservesDifferentWindowAndBoundsKeys(t *testing.T) {
-	l := rateLimiter{entries: map[string]rateEntry{}}
+	l := rateLimiter{}
 	now := time.Now()
 	if !l.allow("long", now, 1, time.Hour) {
 		t.Fatal("first counter rejected")
@@ -81,12 +84,14 @@ func TestRateLimiterPreservesDifferentWindowAndBoundsKeys(t *testing.T) {
 	if l.allow("long", now.Add(2*time.Minute), 1, time.Hour) {
 		t.Fatal("short-window cleanup erased long-window counter")
 	}
-	if len(l.entries) > 10000 {
-		t.Fatal("unbounded limiter map")
-	}
-	for key := range l.entries {
-		if len(key) != 64 {
-			t.Fatal("retained raw limiter key")
+	for _, store := range l.stores {
+		if len(store) > rateLimiterKeysPerPurpose {
+			t.Fatal("unbounded limiter map")
+		}
+		for key := range store {
+			if len(key) != 64 {
+				t.Fatal("retained raw limiter key")
+			}
 		}
 	}
 }
@@ -112,5 +117,81 @@ func TestTrustedProxyClientAddress(t *testing.T) {
 		if _, e := config.ParseTrustedProxies(raw); e == nil {
 			t.Fatalf("accepted unsafe prefix %q", raw)
 		}
+	}
+}
+
+func TestResponseCacheIsBoundedByBytes(t *testing.T) {
+	s := NewServer(nil, config.Config{})
+	h := s.cached(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(make([]byte, 3<<20)) })
+	for _, path := range []string{"/a", "/b", "/c", "/d", "/e"} {
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != 200 || w.Body.Len() != 3<<20 {
+			t.Fatalf("%s served %d bytes with %d", path, w.Body.Len(), w.Code)
+		}
+	}
+	total := 0
+	for _, entry := range s.responses.entries {
+		total += len(entry.body)
+	}
+	if total > maxCachedResponseBytes || total == 0 || total != s.responses.bytes {
+		t.Fatalf("cache holds %d bytes (accounted %d), bound %d", total, s.responses.bytes, maxCachedResponseBytes)
+	}
+}
+
+func TestResponseCacheCoalescesConcurrentMisses(t *testing.T) {
+	s := NewServer(nil, config.Config{})
+	var calls atomic.Int32
+	release := make(chan struct{})
+	h := s.cached(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		<-release
+		_, _ = w.Write([]byte("feed"))
+	})
+	const readers = 10
+	var wg sync.WaitGroup
+	bodies := make(chan string, readers)
+	for range readers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w := httptest.NewRecorder()
+			h(w, httptest.NewRequest("GET", "/api/rss", nil))
+			bodies <- w.Body.String()
+		}()
+	}
+	// Without coalescing every reader reaches the handler; give them time to, then let the first finish.
+	for deadline := time.Now().Add(200 * time.Millisecond); calls.Load() < readers && time.Now().Before(deadline); {
+		time.Sleep(time.Millisecond)
+	}
+	close(release)
+	wg.Wait()
+	close(bodies)
+	for body := range bodies {
+		if body != "feed" {
+			t.Fatalf("waiting reader got %q", body)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("%d concurrent misses rebuilt the response %d times", readers, got)
+	}
+}
+
+func TestResponseCacheWaitersRetryAfterFailedBuild(t *testing.T) {
+	s := NewServer(nil, config.Config{})
+	var calls atomic.Int32
+	h := s.cached(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			w.WriteHeader(500)
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	})
+	first := httptest.NewRecorder()
+	h(first, httptest.NewRequest("GET", "/api/rss", nil))
+	second := httptest.NewRecorder()
+	h(second, httptest.NewRequest("GET", "/api/rss", nil))
+	if first.Code != 500 || second.Code != 200 || second.Body.String() != "ok" {
+		t.Fatalf("failed build was cached: %d then %d %q", first.Code, second.Code, second.Body.String())
 	}
 }

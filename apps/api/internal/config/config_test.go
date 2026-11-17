@@ -91,3 +91,22 @@ func TestUnknownApplicationEnvironmentCannotDisableTLSGuard(t *testing.T) {
 		t.Fatal("valid production configuration rejected")
 	}
 }
+
+func TestViewHashSecretIsOptionalButNotWeak(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("APP_ORIGIN", "http://localhost:3000")
+	t.Setenv("TRUSTED_PROXY_CIDRS", "")
+	t.Setenv("S3_BUCKET", "")
+	t.Setenv("VIEW_HASH_SECRET", "")
+	if cfg := FromEnv(); cfg.ViewHashSecret != "" || Validate(cfg) != nil {
+		t.Fatal("empty VIEW_HASH_SECRET should select the per-process secret")
+	}
+	t.Setenv("VIEW_HASH_SECRET", "short")
+	if Validate(FromEnv()) == nil {
+		t.Fatal("accepted a guessable VIEW_HASH_SECRET")
+	}
+	t.Setenv("VIEW_HASH_SECRET", "0123456789abcdef0123456789abcdef")
+	if cfg := FromEnv(); cfg.ViewHashSecret != "0123456789abcdef0123456789abcdef" || Validate(cfg) != nil {
+		t.Fatal("rejected a 32-character VIEW_HASH_SECRET")
+	}
+}

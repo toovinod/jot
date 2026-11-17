@@ -13,6 +13,7 @@ type SnapshotSummary struct {
 	Visibility     string `json:"visibility"`
 	Excerpt        string `json:"excerpt"`
 	ReadingMinutes int    `json:"readingMinutes"`
+	Tags           Tags   `json:"tags"`
 }
 
 type PostSummary struct {
@@ -27,6 +28,12 @@ type PostSummary struct {
 	IsPublished  bool       `json:"isPublished"`
 	Likes        int        `json:"likes"`
 	Comments     int        `json:"comments"`
+	Views        int64      `json:"views"`
+	ScheduledAt  *time.Time `json:"scheduledAt,omitempty"`
+	// LiveVisibility is the published copy's visibility; empty when unpublished.
+	LiveVisibility string `json:"liveVisibility,omitempty"`
+	// ScheduleError says why the worker cleared a schedule; owned-library summaries only.
+	ScheduleError string `json:"scheduleError,omitempty"`
 }
 
 func SummarizeSnapshot(snapshot Snapshot) SnapshotSummary {
@@ -39,7 +46,7 @@ func SummarizeSnapshot(snapshot Snapshot) SnapshotSummary {
 	if minutes < 1 {
 		minutes = 1
 	}
-	return SnapshotSummary{Title: snapshot.Title, Subtitle: snapshot.Subtitle, Slug: snapshot.Slug, Cover: snapshot.Cover, Visibility: snapshot.Visibility, Excerpt: string(runes), ReadingMinutes: minutes}
+	return SnapshotSummary{Title: snapshot.Title, Subtitle: snapshot.Subtitle, Slug: snapshot.Slug, Cover: snapshot.Cover, Visibility: snapshot.Visibility, Excerpt: string(runes), ReadingMinutes: minutes, Tags: snapshot.Tags}
 }
 
 func DocumentText(node Node) string {

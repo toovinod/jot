@@ -38,10 +38,15 @@ func parseRetryAfter(value string, now time.Time) time.Duration {
 	}
 	return 0
 }
+
+// PostJSON sends payload as JSON. A json.RawMessage is sent byte for byte, so a persisted request replays exactly.
 func PostJSON(ctx context.Context, client *http.Client, endpoint, key, idempotency string, payload any) ([]byte, error) {
-	b, e := json.Marshal(payload)
-	if e != nil {
-		return nil, e
+	b, raw := payload.(json.RawMessage)
+	if !raw {
+		var e error
+		if b, e = json.Marshal(payload); e != nil {
+			return nil, e
+		}
 	}
 	req, e := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(b))
 	if e != nil {

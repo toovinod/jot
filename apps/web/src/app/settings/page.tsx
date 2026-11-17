@@ -3,11 +3,21 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { User } from "@jot/contracts";
 import { api, send, upload } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { useSession } from "@/components/providers";
 import { AppShell, Private } from "@/components/shell";
-import { Avatar } from "@/components/document";
-import { Button } from "@/components/ui/button";
+import { Avatar } from "@/components/post-parts";
+import { FormSection, PageBody, SceneHeader } from "@/components/app";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, Input, Textarea, ErrorMessage } from "@/components/ui/fields";
+import {
+  BlockedReaders,
+  CustomDomainSection,
+  DeleteAccount,
+  EmailSection,
+  ExportSection,
+  Subscribers,
+} from "./account-sections";
 export default function Settings() {
   return (
     <Private>
@@ -57,20 +67,14 @@ function SettingsContent() {
   if (!user) return null;
   return (
     <AppShell active="settings">
-      <div className="px-5 py-10 md:px-10">
-        <div className="max-w-2xl">
-          <p className="mb-3 font-mono text-xs text-sky-deep">settings</p>
-          <h1 className="font-display text-4xl font-extrabold tracking-[-0.05em] md:text-5xl">
-            a little about{" "}
-            <em className="font-serif font-normal italic tracking-[-0.03em] [font-variation-settings:'SOFT'_100]">
-              you.
-            </em>
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Your public profile is the signature at the end of every page.
-          </p>
+      <SceneHeader
+        title="settings."
+        subtitle="your profile, your readers, and everything you wrote."
+        cast={["cup", "star", "cloud"]}
+      />
+      <PageBody>
+        <div className="relative -mt-14 grid gap-5">
           <form
-            className="mt-8 grid gap-6 rounded-3xl border border-border bg-white p-6 shadow-[0_3px_0_var(--border)] md:p-8"
             onSubmit={async (e) => {
               e.preventDefault();
               if (busy || uploading) return;
@@ -87,7 +91,7 @@ function SettingsContent() {
                 setName(saved.name);
                 setBio(saved.bio);
                 setAvatar(saved.avatar);
-                toast.success("Your profile is updated.");
+                toast.success("your profile is updated.");
               } catch (e) {
                 setError((e as Error).message);
               } finally {
@@ -95,102 +99,90 @@ function SettingsContent() {
               }
             }}
           >
-            <fieldset disabled={busy || uploading} className="grid gap-6">
-              <div className="flex items-center gap-5">
-                <Avatar user={{ ...user, avatar, name }} size="large" />
-                <label className="cursor-pointer rounded-full border border-border bg-white px-4 py-2 text-sm font-medium transition-colors hover:bg-sky-soft focus-within:ring-2 focus-within:ring-ring">
-                  {uploading ? "Uploading…" : "Change photo"}
-                  <input
-                    aria-label="Upload profile photo"
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif"
-                    className="sr-only"
-                    disabled={uploading}
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setUploading(true);
-                      try {
-                        setAvatar((await upload(file)).url);
-                      } catch (e) {
-                        setError((e as Error).message);
-                      } finally {
-                        setUploading(false);
-                      }
-                    }}
-                  />
-                </label>
-                {avatar && (
-                  <Button variant="ghost" onClick={() => setAvatar("")} type="button">
-                    Remove
-                  </Button>
-                )}
-              </div>
-              <Field label="Name">
-                <Input
-                  value={name}
-                  required
-                  maxLength={100}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </Field>
-              <Field label="Username" hint="Your permanent address on Jot.">
-                <Input value={`@${user.username}`} disabled />
-              </Field>
-              <Field label="Bio" hint="A few words about who you are. Public on your profile.">
-                <Textarea
-                  value={bio}
-                  maxLength={1000}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Curious about…"
-                />
-              </Field>
-              <ErrorMessage message={error} />
-              <p role="status" className="text-xs text-muted-foreground">
-                {dirty ? "You have unsaved profile changes." : "Your profile is up to date."}
-              </p>
-              <Button className="justify-self-start" disabled={busy || uploading}>
-                {busy ? "Saving…" : "Save profile"}
-              </Button>
-            </fieldset>
-          </form>
-          <section className="mt-6 rounded-3xl border border-border bg-white p-6 shadow-[0_3px_0_var(--border)] md:p-8">
-            <h2 className="font-display text-xl font-bold tracking-[-0.03em]">
-              available in this workspace
-            </h2>
-            <ErrorMessage message={configError} />
-            <p className="mt-3 text-sm leading-7 text-muted-foreground">
-              Writing assistance: {config.aiEnabled ? "available" : "not configured"}
-              <br />
-              Email subscriptions: {config.emailEnabled ? "available" : "not configured"}
-            </p>
-            <p className="mt-5 text-xs leading-6 text-muted-foreground">
-              Verify your account email before sending publication emails. Confirmation links are
-              delivered through the configured email provider.
-            </p>
-            <Button
-              className="mt-4"
-              type="button"
-              variant="outline"
-              disabled={!config.emailEnabled || busy}
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                try {
-                  await api("/auth/verification/request", { method: "POST", body: send({}) });
-                  toast.success("Check your inbox for a verification link.");
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
+            <FormSection
+              title="profile"
+              description="your name, photo and bio sign every page you publish."
+              footer={
+                <>
+                  <p role="status" className="mr-auto text-xs text-muted-foreground">
+                    {dirty ? "you have unsaved changes." : "your profile is up to date."}
+                  </p>
+                  <Button disabled={busy || uploading}>{busy ? "saving…" : "save profile"}</Button>
+                </>
+              }
             >
-              Send verification link
-            </Button>
-          </section>
+              <fieldset disabled={busy || uploading} className="grid min-w-0 gap-5">
+                <div className="flex flex-wrap items-center gap-4">
+                  <Avatar user={{ ...user, avatar, name }} size="large" />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label
+                      className={cn(
+                        buttonVariants({ variant: "outline" }),
+                        "focus-within:ring-3 focus-within:ring-sky/60",
+                      )}
+                    >
+                      {uploading ? "uploading…" : avatar ? "change photo" : "add a photo"}
+                      <input
+                        aria-label="Upload profile photo"
+                        type="file"
+                        accept="image/png,image/jpeg,image/gif,image/webp"
+                        className="sr-only"
+                        disabled={uploading}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploading(true);
+                          try {
+                            setAvatar((await upload(file)).url);
+                          } catch (e) {
+                            setError((e as Error).message);
+                          } finally {
+                            setUploading(false);
+                          }
+                        }}
+                      />
+                    </label>
+                    {avatar && (
+                      <Button variant="ghost" onClick={() => setAvatar("")} type="button">
+                        remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="w-full text-xs text-muted-foreground">
+                    png, jpeg, gif or webp, up to 10 MB.
+                  </p>
+                </div>
+                <Field label="name">
+                  <Input
+                    value={name}
+                    required
+                    maxLength={100}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </Field>
+                <Field label="username" hint={`permanent. your pages live at /@${user.username}.`}>
+                  <Input value={`@${user.username}`} disabled />
+                </Field>
+                <Field label="bio" hint="a few words about who you are. shown on your profile.">
+                  <Textarea
+                    value={bio}
+                    maxLength={1000}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="curious about…"
+                  />
+                </Field>
+                <ErrorMessage message={error} />
+              </fieldset>
+            </FormSection>
+          </form>
+          <EmailSection config={config} configError={configError} />
+          <Subscribers />
+          <BlockedReaders />
+          {config.domainTarget && <CustomDomainSection target={config.domainTarget} />}
+          <ExportSection />
+          <DeleteAccount userId={user.id} />
         </div>
-      </div>
+      </PageBody>
     </AppShell>
   );
 }

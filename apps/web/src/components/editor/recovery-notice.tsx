@@ -1,4 +1,5 @@
 "use client";
+import { ClockCounterClockwise, WarningCircle } from "@phosphor-icons/react";
 import { Button } from "../ui/button";
 import { useEditorController } from "./editor-controller";
 export function RecoveryNotice() {
@@ -7,31 +8,43 @@ export function RecoveryNotice() {
   return (
     <>
       {recovery && (
-        <section
-          role="status"
-          className="mx-auto my-5 max-w-4xl space-y-4 rounded-2xl border border-[#f5d77a] bg-[#fff8e0] p-5"
-        >
-          <h2 className="font-medium">This tab has an unsaved local draft.</h2>
-          <p className="text-sm leading-6 text-muted-foreground">
-            The saved server draft is shown below. Recover your local writing or export it before
-            discarding. If another session saved newer changes, recovery will require you to merge
-            them.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Button size="sm" onClick={recoverLocalDraft}>
-              Recover local draft
-            </Button>
-            <Button size="sm" variant="outline" onClick={downloadRecovery}>
-              Export local copy
-            </Button>
-            <Button size="sm" variant="ghost" onClick={discardLocalDraft}>
-              Discard local copy
-            </Button>
+        <div role="status" className="rounded-xl bg-[#fff8e1] px-4 py-3.5 font-sans">
+          <div className="flex gap-3">
+            <ClockCounterClockwise
+              weight="bold"
+              aria-hidden="true"
+              className="mt-0.5 size-4 shrink-0 text-[#9a6700]"
+            />
+            <div className="min-w-0 flex-1 space-y-2.5">
+              <div>
+                <h2 className="text-sm font-medium">this browser has an unsaved local draft.</h2>
+                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                  the saved draft is shown below. bring back your local writing, or export it before
+                  you discard it. if another session saved newer changes, you&apos;ll need to merge
+                  them.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={recoverLocalDraft}>
+                  recover local draft
+                </Button>
+                <Button size="sm" variant="outline" onClick={downloadRecovery}>
+                  export local copy
+                </Button>
+                <Button size="sm" variant="ghost" onClick={discardLocalDraft}>
+                  discard local copy
+                </Button>
+              </div>
+            </div>
           </div>
-        </section>
+        </div>
       )}
       {recoveryWarning && (
-        <p role="alert" className="mx-auto max-w-4xl px-5 py-4 text-sm text-destructive">
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-xl bg-destructive/[0.06] px-4 py-2.5 font-sans text-sm text-destructive"
+        >
+          <WarningCircle weight="fill" aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           {recoveryWarning}
         </p>
       )}
