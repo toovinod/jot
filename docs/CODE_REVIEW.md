@@ -1,6 +1,6 @@
 # Code review and fixes
 
-Reviewed on 10 November 2026 across the frontend, contracts, Go API, database, worker, provider clients, scripts, dependencies, CI and deployment configuration. Three parallel reviewers covered separate areas; the main reviewer inspected the fixes, integration boundaries and runtime behavior.
+This is the historical review of the initial implementation on 10 November 2026. It covered the frontend, contracts, Go API, database, worker, provider clients, scripts, dependencies, CI, and deployment configuration. See [Verification](VERIFICATION.md) for subsequent checks and [Operations](OPERATIONS.md) for deployment guidance.
 
 The repository had no initial commit. Review used a source snapshot taken before changes, direct source inspection, reproducible failures and regression tests. No commit, push or deployment was performed.
 
@@ -81,6 +81,6 @@ No P0 issue was found. All 37 confirmed findings below were fixed: 3 P1, 23 P2 a
 
 ## Remaining verification boundaries
 
-Real Neon, OpenAI, Resend and hosted S3 credentials were unavailable. Controlled provider/storage tests establish local behavior, not actual account configuration or delivery. Full container builds, the Docker context-export probe and container startup were not executed locally because the Docker daemon was stopped; CI contains those checks but was not run remotely in this session.
+This review used controlled provider and storage responses. The Docker daemon was stopped at the time. The [14 November verification](VERIFICATION.md#neon-setup-verification-14-november-2026) records later hosted Neon database and object storage checks, with full container startup covered in the [version refresh](VERIFICATION.md#version-refresh-verification-14-november-2026).
 
-Clipboard fidelity is bounded by the supported editor schema and available image URLs/files. Tab recovery depends on browser storage and cannot recover a closed tab after its storage is discarded. Unlisted posts are link-accessible rather than access-controlled. S3 ambiguous-outcome reservations are conservative and can require reconciliation. See `OPERATIONS.md` for deployment, backups, suppression, moderation, perimeter rate limiting and reconciliation responsibilities.
+Clipboard fidelity is bounded by the supported editor schema and available image URLs/files. Draft recovery uses local browser storage and depends on the recovery copy being available. Unlisted posts are link-accessible rather than access-controlled. S3 ambiguous-outcome reservations are conservative and can require reconciliation. See `OPERATIONS.md` for deployment, backups, suppression, moderation, perimeter rate limiting and reconciliation responsibilities.

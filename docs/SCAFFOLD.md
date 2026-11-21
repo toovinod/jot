@@ -1,6 +1,8 @@
 # Official Turborepo foundation
 
-On 2026-11-10 the platform builder ran the user-requested generator, without installing or initializing Git, in a separate temporary directory:
+This is a provenance record for the original workspace. For current setup instructions, see the [contributor guide](../CONTRIBUTING.md#develop-from-source).
+
+On 2026-11-10 the Turborepo generator was run in a temporary directory, with dependency installation and Git initialization disabled:
 
 ```sh
 bunx create-turbo@latest /private/tmp/jot-turbo-20261110 \

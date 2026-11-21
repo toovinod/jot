@@ -1,26 +1,51 @@
 # Contributing
 
-Start with README setup, `docs/ARCHITECTURE.md` and `docs/API.md`. Use a dedicated development database and fake provider credentials. Keep secrets, real writing, subscriber addresses, local media and `.env` files out of commits.
+The [architecture guide](docs/ARCHITECTURE.md) maps project responsibilities. The [API reference](docs/API.md) describes the request, response, and document formats.
 
-Make focused changes with one owner for document shapes, API errors, appearance defaults, rendering and job behavior. Update contracts and their consumers together when changing JSON. Add meaningful regression coverage for authorization, concurrency, persistence and asynchronous behavior; avoid tests that only repeat an implementation.
+Use [GitHub Issues](https://github.com/toovinod/jot/issues) for bugs and feature requests. Include the Jot revision, how you ran it, and what you expected to happen. Keep real writing, account details, subscriber addresses, logs containing secrets, and `.env` files out of issues and commits. Follow [Security](SECURITY.md) for vulnerabilities.
 
-Before submitting a change, run:
+## Develop from source
+
+Fork and clone the repository. Install Bun 1.4.4, a Go installation that can use the module's pinned Go 1.27.4 toolchain, and Docker Compose for PostgreSQL. From the repository root:
 
 ```sh
 bun install --frozen-lockfile
+cp .env.example .env
+bun run db:up
 bun run db:migrate
-bun run format:check
-bun run check
-bun run test
-bun run build
-(cd apps/api && go test -race ./...)
-bun run test:integration
+bun run dev
 ```
 
-Run the HTTP integration script with the API and web service already running and an isolated database. State which provider and container paths were actually exercised. For UI changes, inspect the editor and reading view at desktop and mobile widths with keyboard navigation. For database changes, include migration and backup/rollback implications; migrations must support an upgrade from existing data.
+If you already created `.env` for the Docker preview, keep it and stop the preview before starting source development. Edit the local database URL in `.env` if you changed the database port or credentials. The web app runs at [localhost:3000](http://localhost:3000), the API at port 8080, and the local PostgreSQL at port 5433 by default. Turbo starts the worker alongside the web and API. Run `bun run worker` to start the worker on its own and `bun run db:down` to stop the development database while keeping its volume.
 
-Pull requests should explain the user-visible problem, resulting behavior, validation, and material remaining gaps. Do not describe configured-but-untested providers or deployment as verified. Contributions are accepted under the repository's MIT license.
+For sample content, follow the [demo fixtures guide](docs/OPERATIONS.md#demo-fixtures).
 
-Husky installs the pre-commit hook during `bun install`. The hook formats staged code/doc files with lint-staged, formats staged Go with gofmt, then runs workspace checks and tests. lint-staged protects partially staged changes with its normal stash workflow. Run `bun run format` after broad edits. CI repeats the checks even when a hook is skipped.
+## Checks
 
-`bun run check:source` checks authored text for em dashes and emoji without changing files. Generated files, dependency locks, private environment files and binary assets are excluded. Release archives and systems without Git use a bounded filesystem inventory; regular Git checkouts retain Git ignore behavior. Deleted files and symlink targets are not read. Useful comments are reviewed manually. TypeScript checks also reject unused local declarations and parameters.
+Run these from the repository root:
+
+```sh
+bun install --frozen-lockfile
+bun run format:check
+bun run verify
+```
+
+`bun run verify` runs source policy, TypeScript, Go vet, workspace tests, and production builds. Husky installs the pre-commit hook during `bun install`. The hook applies staged formatting and runs `bun run check` and `bun run test`. Format a file directly with Prettier or gofmt, or run `bun run format` for the entire repository.
+
+For database integration tests, set `JOT_TEST_DATABASE_URL` to a dedicated PostgreSQL database the tests can migrate and modify. To run the backend race tests against it:
+
+```sh
+cd apps/api
+go test -race ./...
+```
+
+Export `JOT_TEST_DATABASE_URL` before using `go test` directly. For cross-service changes, run the [HTTP smoke test](docs/OPERATIONS.md#verification) against a disposable stack with web, API, and worker running. It creates accounts and writes content. Use `bun run check:containers` for Compose changes.
+
+## Pull requests
+
+- Explain the user-visible change, how you tested it, and any relevant test limits.
+- Update the Go handlers, TypeScript contracts, and API docs together when changing a request or response shape.
+- For database changes, check upgrades from existing data and document backup or rollback implications.
+- For UI changes, check the affected flows at desktop and mobile widths, including keyboard navigation.
+
+Contributions are accepted under the [MIT License](LICENSE).

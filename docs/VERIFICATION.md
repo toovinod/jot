@@ -1,8 +1,15 @@
 # Local verification
 
-Verified on 10 November 2026. This records local results, not a public deployment or a passed remote CI run.
+This page records checks against specific revisions and environments. For the steps to verify a new deployment, see [Operations](OPERATIONS.md#release-gates).
 
-## Passing checks
+## Source checkout, 21 November 2026
+
+- At `6c61b94`, all 294 frontend tests passed with Bun 1.4.4. A fresh local clone passed `bun install --frozen-lockfile`, `bun run db:migrate`, and startup of the web app, API, and worker via `bun run dev` against a disposable PostgreSQL 14.19 instance.
+- The Go suite passed with `JOT_TEST_DATABASE_URL` set to the disposable database, including database integration tests.
+- The HTTP smoke passed all 18 checks against the running source stack, including image upload, draft isolation, public page rendering, scheduled publication by the worker, RSS, and account deletion. It used disposable database fixtures for email tokens and custom-domain verification.
+- Both Compose configurations resolved successfully. This pass used native PostgreSQL for runtime tests. Container startup, live OpenAI and Resend requests, and public DNS and TLS were outside this pass.
+
+## Initial implementation, 10 November 2026
 
 - Official `bunx create-turbo@latest` scaffold with Bun workspaces; provenance in `SCAFFOLD.md`.
 - Frozen Bun installation, Prettier/Go formatting, source policy, strict TypeScript including unused symbols, and Go vet.
@@ -22,13 +29,13 @@ Verified on 10 November 2026. This records local results, not a public deploymen
 
 The initial implementation review corrected concurrent-save acknowledgements, password-reset/session races, rate-limit key bounds and expiration, exhausted-job cleanup, cancelled-job fencing, production image decoder registration, encoded author routing, server-side API configuration and theme/accent cascade priority. The subsequent severity-based review fixed 37 additional grouped findings. See `CODE_REVIEW.md` for their impact, fixes, regression evidence and verification boundaries.
 
-## Limits and release work
+### Limits of the 10 November run
 
 The 10 November review used controlled provider responses. Hosted Postgres and storage were subsequently verified as described below. Resend delivery/domain verification and live OpenAI requests remain unverified. Clipboard structure is preserved within the supported editor schema. App-specific styles and private images can require manual review or re-upload. Uploaded clipboard attachments can move after pasted text, with an explicit warning.
 
-The local Docker daemon was stopped. Container configuration was validated, but image build and full container runtime results remain unverified locally. CI includes image builds and full-stack HTTP checks through Caddy; that workflow has not been run remotely in this session.
+The Docker daemon was stopped during this run, so it covered container configuration only. The full stack was exercised on 14 November, as recorded below.
 
-See `OPERATIONS.md` for public-release requirements, including delivery suppression, moderation, backups, storage reconciliation, distributed/perimeter rate limits and deployment rehearsal. No remote repository, commit, push or public deployment was created.
+See the [code review record](CODE_REVIEW.md) for the findings from this run.
 
 ## Neon setup verification, 14 November 2026
 

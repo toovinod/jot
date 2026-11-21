@@ -1,45 +1,48 @@
-# Jot
+<p align="center">
+  <img src="apps/web/src/app/icon.svg" width="96" height="96" alt="Three fanned pages" />
+</p>
 
-An open-source writing canvas for turning existing notes into readable public pages. Paste or import writing, edit rich text and code, adjust typography and page order, then publish a snapshot at `/@username/slug`. Draft edits stay private until you publish again.
+<h1 align="center">Jot</h1>
 
-Built with Bun workspaces and Turborepo, Next.js/React/Tiptap, and a Go API and independent worker backed by Postgres. MIT licensed. This is an initial implementation; review the [release gates](docs/OPERATIONS.md#release-gates) before exposing it to the public.
+<p align="center">An open-source writing and publishing app.</p>
 
-## Local setup
+<p align="center">
+  <a href="#about">About</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="docs/OPERATIONS.md">Self-hosting</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
-Install Bun **1.4.4**, Go **1.27.4** (or a Go installation that can download the module's pinned toolchain), and Docker Compose for local Postgres. Bun installs workspace dependencies and runs Next.js and the JavaScript tooling. Go runs the API, worker, and migrations.
+## About
+
+Jot turns notes and Markdown into pages you can publish at `/@username/slug`. Paste existing writing or start with a blank page. Edit rich text, images, and code, then choose the page's typography, width, and theme.
+
+Publish publicly or unlisted, schedule a release, or share a read-only draft link. You can keep editing after publishing. Readers see the published edition until you publish again. Public posts appear on author profiles, in discovery, and in RSS. Email newsletters and Jot AI are optional.
+
+## Quick start
+
+With Docker and Docker Compose installed, run:
 
 ```sh
-bun install --frozen-lockfile
+git clone https://github.com/toovinod/jot.git
+cd jot
 cp .env.example .env
-bun run db:up
-bun run db:migrate
-bun run dev
+docker compose --profile app up --build -d --wait
 ```
 
-Open [localhost:3000](http://localhost:3000). The API listens on port 8080 and the web server proxies `/api` and `/media`. The worker starts alongside them through Turbo; it can also run independently with `bun run worker`. Optional integrations are disabled when their keys are absent. Start the API first, then `SEED_PASSWORD=your-demo-password bun run seed` adds sample public writing for local exploration through the normal HTTP API. Use a unique 10-72 byte password; optional `SEED_EMAIL` and `SEED_USERNAME` override the demo identity.
+Open [localhost:3000](http://localhost:3000) to sign up, write, and publish. The local stack uses PostgreSQL and disk storage. See the [operations guide](docs/OPERATIONS.md#public-deployment) for public HTTPS, backups, and provider setup.
 
-For Neon, link the CLI to your project and run `neon deploy` with `neon.ts`. The CLI pulls the pooled `DATABASE_URL` for the API and worker and `DATABASE_URL_UNPOOLED` for migrations. To serve images from the declared `jot` bucket, set `S3_BUCKET=jot`. The API uses the CLI's `AWS_*` variables and serves public image URLs from the branch's storage endpoint. Run `bun run db:migrate` before starting the app. Keep provider and database credentials in the ignored root `.env`.
+## Documentation
 
-## Commands
+- [Architecture](docs/ARCHITECTURE.md) explains how the web app, Go API, PostgreSQL, and worker fit together.
+- [API reference](docs/API.md) documents routes, data formats, and limits.
+- [Product scope](docs/PLAN.md) and [verification](docs/VERIFICATION.md) record supported features and testing history.
 
-| Command                    | Purpose                                               |
-| -------------------------- | ----------------------------------------------------- |
-| `bun run dev`              | Web, API and independent worker                       |
-| `bun run check`            | TypeScript checks and Go vet                          |
-| `bun run test`             | Unit and configured database tests                    |
-| `bun run build`            | Production web build and Go binaries                  |
-| `bun run verify`           | Checks, tests and build                               |
-| `bun run test:integration` | HTTP flow against running app; isolated DB required   |
-| `bun run seed`             | Publish missing demo fixtures through the running API |
-| `bun run db:migrate`       | Apply embedded migrations                             |
-| `bun run db:down`          | Stop local Compose services, preserving volumes       |
+## Contributing
 
-Set `JOT_TEST_DATABASE_URL` to a dedicated test database to enable Go database integration tests. Set `JOT_SMOKE_URL` to exercise another running origin with the HTTP smoke script. The smoke script creates accounts and content; use a disposable database. CI supplies Postgres and runs the full checks, race tests, production build and cross-service smoke.
+See the [contributor guide](CONTRIBUTING.md) for Bun and Go setup, tests, and pull requests. Share bugs and feature requests in [GitHub Issues](https://github.com/toovinod/jot/issues). For vulnerabilities, follow the [security policy](SECURITY.md).
 
-## Integrations and self-hosting
+## License
 
-- **Resend:** provide `RESEND_API_KEY` and an `EMAIL_FROM` address on a verified domain. Subscription confirmation and publication email are queued; run the worker continuously. Test confirmation, unsubscribe, deliverability and provider errors before enabling email publicly.
-- **OpenAI:** set `OPENAI_API_KEY` to enable grammar, structure or knowledge-gap suggestions. The default model is `gpt-6-luna`, and `OPENAI_MODEL` can override it. Suggestions require review and never publish automatically.
-- **Images:** local disk works without a storage provider. Persist `UPLOAD_DIR`, or configure S3-compatible storage and its public base URL through `S3_PUBLIC_URL`. Uploaded images are public, unguessable assets even when attached to a draft.
-
-[Self-hosting and operations](docs/OPERATIONS.md) covers containers, sanitized Caddy ingress, TLS, backups, queues and release limitations. [Architecture](docs/ARCHITECTURE.md), [API contract](docs/API.md), [implementation plan](docs/PLAN.md), [contributing](CONTRIBUTING.md), and [security](SECURITY.md) describe the boundaries and review expectations. The [scaffold record](docs/SCAFFOLD.md) documents the official `create-turbo` foundation and its adaptations.
+Jot is licensed under the [MIT License](LICENSE).

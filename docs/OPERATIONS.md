@@ -2,37 +2,41 @@
 
 ## Environment
 
-Copy `.env.example` and fill values for the target environment. Root Bun commands load this file and Turbo explicitly passes supported values to workspaces. Running `go run` directly does not load `.env`; export the values first. Relative upload paths resolve from the Go process's working directory. Containers use `/data/uploads`.
+Copy [`.env.example`](../.env.example) to `.env` and set values for the target environment. Root Bun commands load `.env` and Turbo passes supported values to workspaces. Export the variables when running `go run` directly. Relative upload paths resolve from the Go process's working directory. Containers use `/data/uploads`.
 
-Use the pooled Neon `DATABASE_URL` with TLS for the API and worker. Migrations prefer the direct `DATABASE_URL_UNPOOLED` when set. For Compose, set the separate `COMPOSE_DATABASE_URL` and `COMPOSE_DATABASE_URL_UNPOOLED` overrides to the intended hosted URLs. This keeps a copied localhost development URL from directing a container to the wrong host. Run `bun run db:migrate` once during a controlled release before starting new app processes. Back up the database and local media before migration. Maintain provider snapshots/PITR and test restore into a separate environment. Restore from backups to roll back data when necessary.
+The source setup reads `DATABASE_URL` for the API and worker. The migration command prefers `DATABASE_URL_UNPOOLED` when present. Compose uses its internal database URL by default. Its separate `COMPOSE_DATABASE_URL` and `COMPOSE_DATABASE_URL_UNPOOLED` overrides target a hosted database.
 
 `APP_ORIGIN` must be the exact public origin, including scheme and port. HTTPS makes API cookies Secure. Set `API_ADDR` for the Go listener, and keep it private behind the web proxy. `API_INTERNAL_URL` is captured in Next rewrites at build time: rebuild the web image when changing it. No API/database/provider credential belongs in a public environment variable.
 
 ## Containers
 
+### Local preview
+
 ```sh
 cp .env.example .env
-# Replace POSTGRES_PASSWORD and set the intended public APP_ORIGIN.
-docker compose --profile app up --build -d
-docker compose --profile app logs -f
+docker compose --profile app up --build -d --wait
 ```
 
 The default Compose invocation starts only Postgres, bound to `127.0.0.1:5433`. The `app` profile builds Bun web and Go API/worker images, applies migrations, then starts the services. Caddy is the only published app ingress, bound to loopback on port 3000 in the base configuration. Web and API ports stay private. The API health check verifies database readiness; the web health check exercises its API proxy. The worker deliberately has no fake HTTP health endpoint: supervise its process and alert on old pending/running jobs and failed jobs.
 
 On a fresh volume, `scripts/database/init-postgres.sh` creates the `jot` database and its owner login without superuser privileges. `POSTGRES_ADMIN_PASSWORD` belongs only to the bootstrap `postgres` account; app services receive only the separate `POSTGRES_PASSWORD` through `PGPASSWORD`. The internal database URL omits its password so reserved URL characters in the password remain literal. A password explicitly supplied in `COMPOSE_DATABASE_URL` takes precedence. Replace both sample passwords before shared hosting. Existing initialized volumes are not reconfigured by this script; migrate roles/passwords manually after taking a backup.
 
-Named `postgres18` and `uploads` volumes preserve state across restarts. `docker compose down` retains these volumes. PostgreSQL 18 uses a new volume mounted at `/var/lib/postgresql`. If an existing local installation uses PostgreSQL 17, export its Jot database with PostgreSQL 17 and restore it into the new volume before switching the app over. The old `postgres` volume retains its original data. For hosted Neon, replace the backend `DATABASE_URL` mapping and remove the local database dependency in a deployment-specific Compose override.
+Named `postgres18` and `uploads` volumes preserve state across restarts. `docker compose --profile app down` stops the stack and retains these volumes.
 
-For public TLS hosting with Docker Compose 2.24.4 or newer, point a public DNS hostname at the host, allow ports 80/443, and set `SITE_ADDRESS` to that hostname without a scheme/path. The production override requires this value, enables Caddy automatic HTTPS, publishes 80/443, and sets the API/worker/migration origin to `https://SITE_ADDRESS` with `APP_ENV=production`:
+### Public deployment
+
+Use Docker Compose 2.24.4 or newer. Point your DNS hostname at the host and allow inbound TCP ports 80 and 443. In `.env`, set `SITE_ADDRESS` to the public DNS hostname without a scheme or path, and set separate non-default `POSTGRES_PASSWORD` and `POSTGRES_ADMIN_PASSWORD` values. The production override sets the app origin to `https://SITE_ADDRESS`, configures Caddy automatic HTTPS, enables production mode for the backend, and removes the published database port.
 
 ```sh
-SITE_ADDRESS=writing.example.com docker compose -f compose.yaml -f compose.production.yaml \
-  --profile app up --build -d
+docker compose -f compose.yaml -f compose.production.yaml --profile app config --quiet
+docker compose -f compose.yaml -f compose.production.yaml --profile app up --build -d --wait
 ```
 
-The production override removes the database's host port. PostgreSQL startup rejects the example application/bootstrap passwords even when `.env.example` was copied unchanged; set separate nondefault `POSTGRES_PASSWORD` and `POSTGRES_ADMIN_PASSWORD` values before starting. Passwords are passed as literal environment values rather than interpolated into a connection URL. Existing volumes still require a deliberate SQL password change as described above.
+Compose runs `migrate` before starting the API and worker. A successful migration exits with code 0. Keep Caddy's `caddy_data` volume for certificate state. After rollout, request `/api/health` through the public HTTPS origin, check Secure session cookies, and verify that the worker processes scheduled jobs and any enabled provider jobs. See [Release gates](#release-gates) before opening the site to the public.
 
-Persist Caddy's `caddy_data` volume for certificate state. Check certificates and Secure cookies after deployment. The production override fails configuration when `SITE_ADDRESS` is missing. Without the override, the loopback HTTP profile is for local verification.
+### Hosted PostgreSQL
+
+For the source setup, set `DATABASE_URL` to the hosted connection URL. With Neon, use the pooled URL with TLS for the API and worker and the direct URL in `DATABASE_URL_UNPOOLED` for migrations. The Neon CLI can populate both in the root `.env` after you link Jot to your project. In Compose, put those URLs in `COMPOSE_DATABASE_URL` and `COMPOSE_DATABASE_URL_UNPOOLED`. Supply the database password in the hosted URL. The shipped Compose file still starts its local database service. To omit it, use a deployment-specific override that removes the local service and the migration service's dependency on it.
 
 ### Forwarded client addresses
 
@@ -62,7 +66,11 @@ Page views are counted once per viewer per post per day. Anonymous viewers are k
 
 Deleting an account removes its database rows in one transaction, then deletes its uploaded files from local disk or S3 (batched `DeleteObjects`, 1000 keys per request) best effort within 50 seconds. The transaction locks the user row first, as uploads do, so a concurrent upload cannot add a media row that deletion misses. Every key that could not be removed, including keys left when the budget ran out, is logged as `Media cleanup failed`; remove those objects manually. Provider requests already sent cannot be recalled.
 
-Roll out API and worker from the same source revision. Check health, read/write flows and queue processing after each rollout; roll back the image only if the schema remains compatible.
+## Upgrades
+
+Back up PostgreSQL and local media before migrating. Retain provider snapshots or point-in-time recovery for hosted databases, and test restores in a separate environment. Run `bun run db:migrate` before starting a source deployment, or let the `migrate` service apply migrations in Compose. Roll out the API and worker from the same source revision. Check health, read/write flows, and queue processing after each rollout. An image rollback requires a compatible schema.
+
+PostgreSQL 18 uses the `postgres18` volume at `/var/lib/postgresql`. To upgrade an existing PostgreSQL 17 installation, export the Jot database with PostgreSQL 17 and restore it into the new volume. The old `postgres` volume retains its original data.
 
 Migrations 4, 5 and 6 only add columns, tables and indexes (6 adds `comment_blocks`, the authors' block lists). Apply them before starting the new API and worker; the new worker publishes scheduled posts and renders newsletters from the recorded edition, and newsletters queued by an older version still send their summary and link.
 
@@ -76,33 +84,37 @@ The password must be explicit and 10-72 bytes. Existing account passwords/detail
 
 ## Storage and providers
 
-Local storage is the default. Persist and back up `UPLOAD_DIR`, and serve it only through the validated media route. Images have public URLs and are not protected by draft ownership. Docker context rules exclude private environment files at every workspace depth; CI probes nested web/API environment fixtures before image builds. In production, configure `S3_BUCKET`, `S3_REGION`, optional `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and `S3_PUBLIC_URL`. Restrict credentials to the required bucket operations. Set correct bucket/CDN public access and CORS policy, verify image upload/read/delete behavior, and establish a retention policy. The app does not claim garbage collection of orphaned images.
+Local disk is the default, including in Compose. Persist and back up `UPLOAD_DIR` and let Jot serve it through the media route. Images have public URLs, even when attached to a draft. With S3-compatible storage, set `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and `S3_PUBLIC_URL`. Set `S3_REGION` and `S3_ENDPOINT` for your provider as needed. Use an HTTPS public media base URL for an HTTPS instance. Restrict credentials to the required bucket operations, verify upload/read/delete behavior, and plan for retention and manual cleanup of orphaned assets.
+
+For Neon Object Storage, link the Neon CLI to the intended project and branch and run `neon deploy` with the repository's [`neon.ts`](../neon.ts). It declares a public-read bucket called `jot`. Set `S3_BUCKET=jot` and use the `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` values from Neon. Jot derives the bucket's public URL unless you set `S3_PUBLIC_URL` explicitly.
 
 For Resend, configure a verified sending domain and `EMAIL_FROM`. Subscription confirmation requires user action; avoid sending publication emails to unconfirmed addresses. Test confirmation expiry, unsubscribe, one-click unsubscribe, retry failures and cancellation. Provider idempotency is bounded by the provider's window; exactly-once delivery is not guaranteed. The worker persists the first serialized Resend request under the current lease, without storing an API key, and reuses that exact request across configuration/template changes. Each attempt still checks the current subscription generation, publication and lease. Stored requests contain recipient addresses and link tokens and follow the existing 30-day terminal email-job retention; run the worker for maintenance and include this retention in your privacy policy. Each newsletter job stores its own request, bounded at 4 MiB, which fits the full HTML and text of any post at the 500,000-byte text limit; a typical long post is about 1 MB. The rendered post is stored once per subscriber, so one publish can store up to 500 copies (2000 per author per day) until retention removes them: size the database for that, or watch `jobs` growth. A post whose links or markup still exceed the bound sends the subtitle and link instead; the worker logs `Newsletter too large for one email` and the job carries `contentOmitted` in its payload and `result`. Newsletters are sent from `"<author name> via <instance>"` on the `EMAIL_FROM` address, where the instance is `EMAIL_FROM`'s display name (or `jot`). Retryable provider responses honor `Retry-After` within the job deadline. Resend concurrent-idempotency conflicts remain retryable, while a different-payload conflict is terminal. An unsubscribe/unpublish that arrives after a provider request is already in flight cannot recall that message. Delivery/bounce/complaint reconciliation and automated suppression must be completed before broad sending.
 
-OpenAI is optional. Set `OPENAI_API_KEY` and `OPENAI_MODEL`. Requested text leaves your server for that provider; disclose this in your privacy policy. AI review identifies possible gaps and does not verify facts. Observe quotas, cost and job failures. Incomplete/truncated and refused responses fail with a safe explanation rather than appearing as completed suggestions or consuming repeated identical retries. Keep all network calls out of publishing transactions.
+OpenAI is optional. Set `OPENAI_API_KEY` to enable Jot AI chat and writing suggestions. The model defaults to `gpt-6-luna` and can be changed with `OPENAI_MODEL`. Requested text and any source material attached to a chat go to OpenAI. Disclose this in your privacy policy and monitor quotas, cost, and job failures. AI review flags possible gaps for the writer to check. Incomplete and refused responses fail the job. The worker prunes completed and failed AI jobs after one day.
 
 ## Verification
 
 CI installs the frozen Bun lockfile, runs migrations against isolated Postgres, checks types/Go vet, runs unit/database tests and Go race tests, builds all workspaces, then starts the production web, API and worker for `scripts/integration/http-smoke.ts`, with `JOT_SMOKE_DATABASE_URL` set to its disposable database. A separate CI job validates Caddy/Compose, builds both container images, starts the full stack, and runs the HTTP smoke through Caddy. Actual run results are reported separately; a workflow file is not proof it passed.
 
-For local HTTP tests, start the API, the worker and the web app against a disposable database, then run `bun run test:integration` with `JOT_SMOKE_URL` (and `APP_ORIGIN`, if it differs) set to the web origin. Root Bun commands load `.env`, so set both explicitly or run `bun --no-env-file run scripts/integration/http-smoke.ts`. The smoke creates randomized accounts and goes through every feature over HTTP: sessions and origin rules, uploads, editor saves and revision conflicts, publishing, editions and restore, tags, search, tag filter and popular sort, likes, bookmarks, comments, replies, comments off, blocking and unblocking readers, views, scheduling (it waits about three minutes for the worker to publish a post), private share links, documents at the size limits, subscriptions, custom domains (set `CUSTOM_DOMAIN_TARGET` on the API to cover more than the disabled path), RSS, the sitemap, the export zip and account deletion. It ends by deleting its author account. With `JOT_SMOKE_DATABASE_URL` pointing at the same disposable database it also plants the tokens email would deliver (verification and subscription confirmation) and marks the custom domain verified to check resolution and custom-host pages; without it those checks cover only what the API answers without email or DNS. Signup allows 10 accounts per client address per hour and the smoke creates 3, so restart the API between frequent runs. Never point it at a production database.
+For local HTTP tests, start the API, worker, and web app against a disposable database, then run `bun run test:integration`. Set `JOT_SMOKE_URL` to the web origin and `APP_ORIGIN` to the origin expected by the API if you changed the defaults. Bun loads the root `.env`; use `bun --no-env-file run scripts/integration/http-smoke.ts` to work only with exported variables and script defaults.
+
+The smoke creates randomized accounts and exercises sessions, uploads, revision conflicts, publishing and restore, discovery, engagement and moderation, draft links, scheduling, feeds, export, and account deletion. Allow about three minutes for the scheduled publication case. `JOT_SMOKE_DATABASE_URL` lets the smoke seed verification and subscription tokens and, when `CUSTOM_DOMAIN_TARGET` is configured, mark a test custom domain verified. Those checks exercise application behavior without calling live email or verifying public DNS. The smoke writes directly to that database, so use the same disposable database your test services use.
 
 ## Release gates
 
-This repository is an initial self-hostable implementation, not a verified public production deployment. Before public exposure, assign owners and validate:
+Before opening an instance to the public, assign owners and validate the following on the target deployment:
 
 - Account email verification and password reset/recovery end-to-end flows with real email, plus session revocation and account deletion against real storage.
 - Abuse reporting, site-wide moderation beyond each author's block list, anti-spam and a private vulnerability reporting channel.
 - Resend domain verification, real delivery, bounce/complaint webhooks, suppression and retry-window behavior.
 - Real OpenAI requests, quotas/cost controls and privacy disclosures if AI is enabled.
-- Hosted S3/Neon configuration, least-privilege credentials, TLS, backup/restore and upgrade rehearsal.
+- PostgreSQL and media backups, restore tests, least-privilege credentials, TLS for hosted services, and upgrade rehearsal.
 - Shared/perimeter rate limits for multiple instances; current in-process limits are not distributed. Each limit purpose (client address, login, signup, and so on) keeps at most 10,000 counters per process. The shared write limit counts IPv6 clients by their /64. A full view-counter or client-address store evicts the counter closest to expiry, so new clients are never locked out of writing; every other full store (login, signup and so on) refuses new keys with 429 until counters expire, so flooding new keys cannot reset those counters but can briefly lock out new clients of that purpose. Put perimeter limits in front for large deployments.
 - Browser clipboard fidelity, upload limits, accessibility and mobile rendering with realistic documents.
 - Queue backlog/dead-letter alerts, worker lease recovery, graceful shutdown and deployment rollback.
 - Dependency vulnerability review and image build/runtime validation on the actual deployment platform.
 
-Custom domains need the TLS and DNS setup above before they are offered. View counts are a per-post total, not analytics. Features deferred by the product plan include detailed analytics, following authors, video and password-protected posts. Do not advertise them as implemented. Append final verified checks and remaining gaps to `PLAN.md` during integration.
+For enabled custom domains, verify DNS ownership, certificate issuance, public reading, and supported reader actions on a test domain. See the [verification record](VERIFICATION.md) for dated checks and [product scope](PLAN.md) for supported features.
 
 ## Dependency audit notes
 

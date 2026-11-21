@@ -1,7 +1,11 @@
 # Security
 
-Do not post credentials, unpublished writing, subscriber addresses or exploitable account data in a public issue. No public security mailbox has been established for this initial repository; contact the maintainer through a private channel before sharing an exploit. Public hosting requires a defined private reporting channel and incident owner.
+Report suspected vulnerabilities privately. On the [repository Security page](https://github.com/toovinod/jot/security), use **Report a vulnerability** if available. If the option is unavailable, contact the repository maintainer privately and ask for a reporting channel before sharing details. Keep vulnerability details, credentials, private drafts, and personal data out of public issues.
 
-The Go service owns sessions, authorization, validation and provider credentials. Use HTTPS with the exact public `APP_ORIGIN`; this controls origin checks and whether session cookies are Secure. Place the web app behind a TLS reverse proxy and keep the API/database private. Never put provider keys in browser variables. Local media and public S3 objects are public assets; avoid sensitive image uploads.
+Include the affected revision, the expected and observed behavior, and any relevant setup details. Redact sensitive data and use accounts and data you control.
 
-Before public release, review the security and delivery gates in `docs/OPERATIONS.md`. Account verification and password recovery endpoints need real provider and end-to-end validation. Shared rate limiting and complete abuse/moderation procedures remain release requirements. Dependency updates need review and the complete checks, particularly document rendering, URL validation, upload signature validation, session cookies and cross-account tests.
+## Self-hosting
+
+Use HTTPS with the exact public `APP_ORIGIN` and keep the API and database behind the public ingress. Store provider credentials on the server. Uploaded images are public assets, even when attached to drafts. Draft share links should be treated like credentials because anyone with a valid link can read the draft until the link is revoked.
+
+Before public hosting, establish a private reporting channel for your instance. Review the [release gates](docs/OPERATIONS.md#release-gates) for rate limiting, account recovery, abuse handling, and provider validation.
