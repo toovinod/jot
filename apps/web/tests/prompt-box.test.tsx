@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { aiChatLimits, defaultAppearance, type AIChatRequest, type Post } from "@jot/contracts";
+import { mockNavigation } from "./mock-navigation";
 const window = new Window({ url: "http://localhost/editor/post", width: 1280, height: 800 });
 for (const [name, value] of Object.entries({
   window,
@@ -21,11 +22,10 @@ for (const [name, value] of Object.entries({
 }))
   Object.defineProperty(globalThis, name, { value, configurable: true });
 const router = { push() {}, replace() {}, prefetch() {}, back() {}, forward() {}, refresh() {} };
-mock.module("next/navigation", () => ({
+mockNavigation({
   useRouter: () => router,
   usePathname: () => "/editor/post",
-  useSearchParams: () => new URLSearchParams(),
-}));
+});
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");

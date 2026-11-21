@@ -5,16 +5,12 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { PostSummary } from "@jot/contracts";
+import { mockNavigation } from "./mock-navigation";
 
 let params = new URLSearchParams();
-mock.module("next/navigation", () => ({
-  useRouter: () => ({ push() {}, replace() {} }),
-  usePathname: () => "/",
+mockNavigation({
   useSearchParams: () => params,
-  notFound: () => {
-    throw new Error("not found");
-  },
-}));
+});
 mock.module("server-only", () => ({}));
 
 const originalFetch = globalThis.fetch;

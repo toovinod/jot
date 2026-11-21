@@ -15,15 +15,9 @@ import {
   type Snapshot,
   type User,
 } from "@jot/contracts";
+import { mockNavigation } from "./mock-navigation";
 
-mock.module("next/navigation", () => ({
-  useRouter: () => ({ push() {}, replace() {}, prefetch() {} }),
-  usePathname: () => "/",
-  useSearchParams: () => new URLSearchParams(),
-  notFound: () => {
-    throw new Error("not found");
-  },
-}));
+mockNavigation();
 mock.module("server-only", () => ({}));
 // Public pages ask whether the request came in on a custom domain.
 let requestHeaders = new Headers();

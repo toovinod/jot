@@ -1,11 +1,10 @@
-import { afterAll, afterEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 import { Window } from "happy-dom";
+import { mockNavigation } from "./mock-navigation";
 
-mock.module("next/navigation", () => ({
-  useRouter: () => ({ push() {}, replace() {}, prefetch() {} }),
+mockNavigation({
   usePathname: () => "/discover",
-  useSearchParams: () => new URLSearchParams(),
-}));
+});
 
 // DOM globals go in before the components load: Radix picks its layout effect at import time.
 const saved = new Map<string, PropertyDescriptor | undefined>();

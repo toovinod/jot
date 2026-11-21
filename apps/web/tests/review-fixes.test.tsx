@@ -1,11 +1,8 @@
-import { mock, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { mockNavigation } from "./mock-navigation";
 
-mock.module("next/navigation", () => ({
-  useRouter: () => ({ push() {}, replace() {} }),
-  usePathname: () => "/",
-  useSearchParams: () => new URLSearchParams(),
-}));
+mockNavigation();
 
 const { Header } = await import("../src/components/shell");
 

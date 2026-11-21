@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -6,12 +6,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { PostSummary } from "@jot/contracts";
 import { liveStatus } from "../src/lib/dashboard-stats";
 import { greetings, tabTitles } from "../src/app/dashboard/flavor";
+import { mockNavigation } from "./mock-navigation";
 
-mock.module("next/navigation", () => ({
-  useRouter: () => ({ push() {}, replace() {} }),
+mockNavigation({
   usePathname: () => "/dashboard",
-  useSearchParams: () => new URLSearchParams(),
-}));
+});
 
 const originalFetch = globalThis.fetch;
 let root: Root | null = null;

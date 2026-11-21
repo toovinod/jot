@@ -1,11 +1,10 @@
-import { mock, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { mockNavigation } from "./mock-navigation";
 
-mock.module("next/navigation", () => ({
-  useRouter: () => ({ push() {}, replace() {} }),
+mockNavigation({
   usePathname: () => "/missing",
-  useSearchParams: () => new URLSearchParams(),
-}));
+});
 
 const { default: NotFound } = await import("../src/app/not-found");
 

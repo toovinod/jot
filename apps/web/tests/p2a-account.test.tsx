@@ -1,15 +1,14 @@
-import { afterEach, beforeAll, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { mockNavigation } from "./mock-navigation";
 
-mock.module("next/navigation", () => ({
-  useRouter: () => ({ push() {}, replace() {} }),
+mockNavigation({
   usePathname: () => "/settings",
-  useSearchParams: () => new URLSearchParams(),
-}));
+});
 
 const originalFetch = globalThis.fetch;
 let root: Root | null = null;

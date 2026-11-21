@@ -1,14 +1,11 @@
-import { afterEach, beforeAll, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MotionConfig } from "motion/react";
+import { mockNavigation } from "./mock-navigation";
 
-mock.module("next/navigation", () => ({
-  useRouter: () => ({ push() {}, replace() {} }),
-  usePathname: () => "/",
-  useSearchParams: () => new URLSearchParams(),
-}));
+mockNavigation();
 
 let root: Root | null = null;
 beforeAll(() => {
